@@ -50,6 +50,6 @@ func testNoBlock1()  {
 
 }
 
-func main() {
+func main3() {
 	testNoBlock1()
 }

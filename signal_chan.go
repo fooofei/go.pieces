@@ -31,6 +31,6 @@ func test_signal2()  {
 }
 
 
-func main() {
+func main1() {
 	test_signal2()
 }

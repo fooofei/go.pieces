@@ -104,6 +104,6 @@ func sliceRange(){
     fmt.Printf("[%v/%v]%v\n", i,len(a),v)
   }
 }
-func main() {
+func main8() {
   sliceRange()
 }

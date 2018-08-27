@@ -2,6 +2,8 @@ package main
 
 import "fmt"
 
+
+
 func do(i interface{}) {
 	switch v := i.(type) {
 	case int:
@@ -28,6 +30,6 @@ func testType1(){
 }
 
 
-func main() {
+func main4() {
 	testType1()
 }

@@ -20,6 +20,6 @@ func test_range_chan()  {
 	}
 }
 
-func main()  {
+func main2()  {
 	test_range_chan()
 }

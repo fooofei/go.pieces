@@ -24,6 +24,6 @@ func foo1()  {
 }
 
 
-func main()  {
+func main9()  {
 	foo1()
 }

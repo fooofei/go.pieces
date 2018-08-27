@@ -56,6 +56,6 @@ func test_producer_consumer(){
 }
 
 
-func main(){
+func main10(){
 	test_producer_consumer()
 }

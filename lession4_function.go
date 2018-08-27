@@ -41,6 +41,6 @@ func testAddr(){
 	}
 }
 
-func main(){
+func main6(){
 	testAddr()
 }
