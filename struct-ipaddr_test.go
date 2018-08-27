@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+    "fmt"
+    "sort"
+)
 
 type IpAddr [4]uint8
 
@@ -20,10 +23,18 @@ func ExampleIpaddr(){
 		"loopback":  {127, 0, 0, 1},
 		"googleDNS": {8, 8, 8, 8},
 	}
-	for name, ip := range hosts {
-		fmt.Printf("%v,%v,%v,%v\n", name, ip, ip.String(), ip.String2())
-	}
+	keys := make([]string, 0)
+	for name,_ := range hosts {
+	    keys = append(keys,name)
+    }
+	sort.Strings(keys)
+	// loopback 和 googleDNS 出现的顺序不固定
+	// 需要借助数组这个数据结构来稳定输出顺序
+	for _,name := range keys{
+	    ip := hosts[name]
+        fmt.Printf("%v,%v,%v,%v\n", name, ip, ip.String(), ip.String2())
+    }
 	//output:
-	//loopback,[127 0 0 1],127.0.0.1,127.0.0.1
 	//googleDNS,[8 8 8 8],8.8.8.8,8.8.8.8
+    //loopback,[127 0 0 1],127.0.0.1,127.0.0.1
 }
