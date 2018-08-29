@@ -44,3 +44,14 @@ func ExampleSimpleStruct2(){
 	//a=<SimpleStruct> (x=11,y=22)
 	//after method2 a=<SimpleStruct> (x=11,y=22)
 }
+
+
+func ExampleNilStruct(){
+	var a *SimpleStruct
+
+	a.method1()
+
+	// SIGSEGV error
+	//fmt.Printf("a=%v\n",a)
+	//output:
+}

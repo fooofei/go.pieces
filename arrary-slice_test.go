@@ -137,3 +137,62 @@ func ExampleSliceRange(){
     //2 of 4=44
     //3 of 4=55
 }
+
+
+func ExampleArray2D(){
+    var arr [3][3]int
+    arr = [3][3]int{{1,2,3},{4,5,6},{7,8,9}}
+
+    // error [...][...]int
+    // error [3][...]int
+    var arr2 [3][3]int =[...][3]int{{1,2,3},{4,5,6},{7,8,9}}
+
+    fmt.Printf("%v\n",arr)
+    fmt.Printf("%v\n", arr2)
+
+    for i,v := range arr{
+        fmt.Printf("(%v,%v)",i,v)
+    }
+    fmt.Println("")
+    for i,v := range arr{
+        for j,w := range v{
+            fmt.Printf("(%v,%v,%v)",i,j,w)
+        }
+    }
+    fmt.Println("")
+    //output:
+    //[[1 2 3] [4 5 6] [7 8 9]]
+    //[[1 2 3] [4 5 6] [7 8 9]]
+    //(0,[1 2 3])(1,[4 5 6])(2,[7 8 9])
+    //(0,0,1)(0,1,2)(0,2,3)(1,0,4)(1,1,5)(1,2,6)(2,0,7)(2,1,8)(2,2,9)
+}
+
+
+func ExampleOutOfRangeSlice(){
+    var arr [3]int = [...]int{1,2,3}
+    fmt.Printf("%v\n",arr)
+    fmt.Printf("arr[2:]=%v\n", arr[2:])
+    // out range
+    //fmt.Printf("arr[5:]=%v\n", arr[2:][5:])
+    //output:
+    //[1 2 3]
+    //arr[2:]=[3]
+}
+
+
+func ExampleDeleteFromSlice(){
+    var arr [3]int = [...]int {1,2,3}
+
+    var s = arr[:]
+
+    fmt.Printf("s=%v\n",s)
+
+    fmt.Printf("pop front=%v\n", append(s[1:]))
+    fmt.Printf("pop back=%v\n", append([]int{},s[:len(s)-1]...))
+    fmt.Printf("pop back=%v\n", append(make([]int,0),s[:len(s)-1]...))
+    //output:
+    //s=[1 2 3]
+    //pop front=[2 3]
+    //pop back=[1 2]
+    //pop back=[1 2]
+}

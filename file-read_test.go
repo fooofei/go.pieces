@@ -106,5 +106,9 @@ func ExampleReadFileOnceAll() {
 func ExampleGetFuncName(){
 	p := reflect.ValueOf(ExampleGetFuncName).Pointer()
 	pName := runtime.FuncForPC(p).Name()
+	// pName is fullpath
+	pName = filepath.Base(pName)
 	fmt.Printf("FuncName=%v", pName)
+	//output:
+	// FuncName=go_pieces.ExampleGetFuncName
 }
