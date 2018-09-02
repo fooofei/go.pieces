@@ -18,11 +18,6 @@ const content = `this
 is
 a` + "\r\nsample"
 
-func getCurrentDir() (executablePath string) {
-	_, callerFile, _, _ := runtime.Caller(0)
-	executablePath = filepath.Dir(callerFile)
-	return executablePath
-}
 
 func ExampleReadFileByLine(){
 	rdr := strings.NewReader(content)
@@ -103,12 +98,23 @@ func ExampleReadFileOnceAll() {
 
 }
 
-func ExampleGetFuncName(){
-	p := reflect.ValueOf(ExampleGetFuncName).Pointer()
+func ExampleGetFuncNameFromAnotherFile(){
+	p := reflect.ValueOf(ExampleGetFuncNameFromAnotherFile).Pointer()
 	pName := runtime.FuncForPC(p).Name()
 	// pName is fullpath
 	pName = filepath.Base(pName)
-	fmt.Printf("FuncName=%v", pName)
+	fmt.Printf("FuncName=%v\n", pName)
+	fmt.Printf("FuncName2=%v\n",GetFuncName(ExampleGetFuncNameFromAnotherFile))
 	//output:
-	// FuncName=go_pieces.ExampleGetFuncName
+	// FuncName=go_pieces.ExampleGetFuncNameFromAnotherFile
+	//FuncName2=ExampleGetFuncNameFromAnotherFile
+
+}
+
+
+func ExampleGetCurDirFromOtherFile(){
+	var a = GetCurrentDir()
+	var b = filepath.Base(a)
+	fmt.Printf("curdir_name=%v\n",b)
+	//output:curdir_name=go_pieces
 }
