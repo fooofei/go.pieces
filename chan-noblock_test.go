@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
-	"time"
+    "fmt"
+    "time"
 )
 
 func produceForNoblock(msgQ chan<- string)  {
@@ -102,6 +102,149 @@ func ExampleChanNoblock2(){
     //[1]main get msg push msg 2
     //[3]main get msg push msg 3
     //[3]main get msg push msg 4
+    //main exit
+
+}
+
+
+func ExampleChanTimeoutSelect(){
+    var c = make(chan int)
+    go func() {
+        for i:=1;i<8;i+=1{
+            time.Sleep(time.Second * time.Duration(i))
+            c <- i
+        }
+        close(c)
+    }()
+
+    for{
+        closed:=false
+        select {
+        case v,ok:=<-c:
+            closed = !ok
+            if closed{
+                break
+            }
+            fmt.Printf("main got %v\n",v)
+        case <-time.After(time.Second):
+            fmt.Printf("main got timeout\n")
+        }
+        if closed{
+            fmt.Printf("chan closed, main exit\n")
+            break
+        }
+    }
+    fmt.Printf("main exit\n")
+    //output:
+    //main got timeout
+    //main got 1
+    //main got timeout
+    //main got 2
+    //main got timeout
+    //main got timeout
+    //main got 3
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got 4
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got 5
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got 6
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got 7
+    //chan closed, main exit
+    //main exit
+
+    // or
+    //main got timeout
+    //main got 1
+    //main got timeout
+    //main got timeout
+    //main got 2
+    //main got timeout
+    //main got timeout
+    //main got 3
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got 4
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got 5
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got 6
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got 7
+    //chan closed, main exit
+    //main exit
+}
+
+
+func ExampleChanTimeoutConversation() {
+    var c= make(chan int)
+    //  体会time.After 放在不同位置的区别
+    var timeout = time.After(time.Second)
+    // 只能使用1次
+    go func() {
+        for i := 1; i < 8; i += 1 {
+            time.Sleep(time.Second * time.Duration(i))
+            c <- i
+        }
+        close(c)
+    }()
+
+    for {
+        closed := false
+        select {
+        case v, ok := <-c:
+            closed = !ok
+            if closed {
+                break
+            }
+            fmt.Printf("main got %v\n", v)
+        case <-timeout:
+            fmt.Printf("main got timeout\n")
+        }
+        if closed {
+            fmt.Printf("chan closed, main exit\n")
+            break
+        }
+    }
+    fmt.Printf("main exit\n")
+    //output:
+    //main got timeout
+    //main got 1
+    //main got 2
+    //main got 3
+    //main got 4
+    //main got 5
+    //main got 6
+    //main got 7
+    //chan closed, main exit
     //main exit
 
 }
