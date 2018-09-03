@@ -16,6 +16,7 @@ func ExampleChanRange(){
     var msgQ = make(chan string)
     go produceForRange(msgQ)
 
+    // range auto detect is closed
     for msg := range msgQ{
         fmt.Printf("Main get from msgQ:%v\n",msg)
     }

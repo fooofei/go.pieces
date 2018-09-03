@@ -36,6 +36,7 @@ func ExampleChanNoblock1(){
         if closed{
             break
         }
+        // 计算逝去多少时间 也可以用 time.Since()
         var nowTime = time.Now()
         var elapseSeconds = nowTime.Sub(startTime).Seconds()
         var elapse = int(elapseSeconds)
@@ -89,8 +90,7 @@ func ExampleChanNoblock2(){
         if closed{
             break
         }
-        var nowTime = time.Now()
-        var elapseSeconds = nowTime.Sub(startTime).Seconds()
+        var elapseSeconds = time.Since(startTime).Seconds()
         var elapse = int(elapseSeconds)
         fmt.Printf("[%v]main get msg %v\n",elapse,msg)
     }
@@ -247,4 +247,76 @@ func ExampleChanTimeoutConversation() {
     //chan closed, main exit
     //main exit
 
+}
+
+
+
+func ExampleChanTimeoutTick() {
+    var c = make(chan int)
+    //
+    var timeout= time.Tick(time.Second)
+    go func() {
+        for i := 1; i < 8; i += 1 {
+            time.Sleep(time.Second * time.Duration(i))
+            c <- i
+        }
+        close(c)
+    }()
+
+    for {
+        closed := false
+        select {
+        case v, ok := <-c:
+            closed = !ok
+            if closed {
+                break
+            }
+            fmt.Printf("main got %v\n", v)
+        case <-timeout:
+            fmt.Printf("main got timeout\n")
+        }
+        if closed {
+            fmt.Printf("chan closed, main exit\n")
+            break
+        }
+    }
+    fmt.Printf("main exit\n")
+    //output:
+    //main got timeout
+    //main got 1
+    //main got timeout
+    //main got timeout
+    //main got 2
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got 3
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got 4
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got 5
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got 6
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got timeout
+    //main got 7
+    //chan closed, main exit
+    //main exit
 }

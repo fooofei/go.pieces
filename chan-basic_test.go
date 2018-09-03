@@ -2,6 +2,7 @@ package main
 
 import (
     "fmt"
+    "math/rand"
     "sync"
     "time"
 )
@@ -222,4 +223,39 @@ func ExampleChanAsSignal5(){
     //goroutine2 exit
     //goroutine1 exit
     //main exit
+}
+
+func ExampleChanSelectNil() {
+    a, b := make(chan string), make(chan string)
+    go func() { a <- "a" }()
+    go func() { b <- "b" }()
+    if rand.Intn(2) == 0 {
+        a = nil
+        fmt.Println("nil a")
+    } else {
+        b = nil
+        fmt.Println("nil b")
+    }
+    select {
+    case s := <-a:
+        fmt.Println("got", s)
+    case s := <-b:
+        fmt.Println("got", s)
+    }
+    //output:
+    //nil b
+    //got a
+}
+
+func ExampleChanCloseTwice(){
+    var ch = make(chan bool)
+
+    fmt.Println("close chan 1")
+    close(ch)
+    fmt.Println("close chan 2")
+    //close(ch)
+    //fmt.Println("main exit")
+    // output:
+    // panic: close of closed channel [recovered]
+    //	panic: close of closed channel
 }
