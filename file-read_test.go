@@ -1,16 +1,16 @@
 package main
 
 import (
-	"bufio"
-	"encoding/hex"
-	"fmt"
-	"io"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"reflect"
-	"runtime"
-	"strings"
+    "bufio"
+    "encoding/hex"
+    "fmt"
+    "io"
+    "io/ioutil"
+    "os"
+    "path/filepath"
+    "reflect"
+    "runtime"
+    "strings"
 )
 
 // include the \n as line end, and \r\n as line end
@@ -96,6 +96,37 @@ func ExampleReadFileOnceAll() {
 	//Read Bytes Array [116 104 105 115 10 105 115 10 97 13 10 115 97 109 112 108 101]
 	//totalLen=17
 
+}
+
+
+func ExampleReadFileBytes(){
+    var rdr * strings.Reader
+    rdr = strings.NewReader(content)
+    // cannot read anything
+    //var b = make([]byte,0,10)
+    // only use 5 bytes
+    //var b = make([]byte,5,10)
+    var b = make([]byte,10,10)
+
+    // or direct use ReadFrom
+    for{
+        rsize,err := rdr.Read(b)
+        if err != nil{
+            if err == io.EOF{
+                break
+            }
+            panic(err)
+        }
+        if rsize ==0{
+            break
+        }
+        fmt.Printf("len=%v cap=%v size=%v %x \n",len(b),cap(b),rsize,b[:rsize])
+    }
+    fmt.Printf("main exit\n")
+    //output:
+    //len=10 cap=10 size=10 746869730a69730a610d
+    //len=10 cap=10 size=7 0a73616d706c65
+    //main exit
 }
 
 func ExampleGetFuncNameFromAnotherFile(){
