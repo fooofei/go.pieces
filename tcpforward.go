@@ -124,7 +124,7 @@ func handleConnection(wg *sync.WaitGroup, client net.Conn, target string, childS
 	}
 }
 
-func main() {
+func TcpForward() {
 	var target string
 	var port int
 	//flag.StringVar(&target, "target", "", "the target (<host>:<port>)")

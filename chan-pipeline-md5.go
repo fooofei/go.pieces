@@ -185,7 +185,7 @@ func MD5All(dir string) (map[string][md5.Size]byte, error){
 }
 
 
-func main(){
+func TestHash(){
 
     var dir = "/Users/hujianfei/go/src/github.com/fooofei/go_pieces/.git"
 
