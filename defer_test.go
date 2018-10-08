@@ -11,7 +11,7 @@ func ExampleDefer1(){
     fmt.Printf("main exit i=%v\n",i)
     //output:
     //main exit i=2
-    //3 i=3
+    //3 i=3`
     //2 i=2
     //1 i=1
 }
@@ -54,4 +54,18 @@ func ExampleDefer3(){
     //1 4
     //1 4
     //1 4
+}
+
+type deferString struct {
+    s string
+}
+
+func ExampleDeferString(){
+    s := deferString{""}
+    defer fmt.Printf("at defer s=%v\n",s)
+    s.s = "aaa"
+    defer fmt.Printf("at defer2 s=%v\n",s)
+    //output:
+    // at defer2 s={aaa}
+    //at defer s={}
 }

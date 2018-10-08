@@ -1,14 +1,17 @@
 package main
 
 import (
-	"fmt"
-	"math"
+    "bufio"
+    "fmt"
+    "io"
+    "math"
 	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
-	"time"
+    "strings"
+    "time"
 )
 
 
@@ -81,4 +84,53 @@ func ExampleSomeConstants(){
 	//GOARCH=amd64
 }
 
+type intGen func() int
+
+func (g * intGen) Read(p []byte) (int,error){
+    next := (*g)()
+    if next > 1000{
+        return 0, io.EOF
+    }
+    s := fmt.Sprintf("%v\n", next)
+    return strings.NewReader(s).Read(p)
+}
+
+func printLine(r io.Reader)  {
+    s := bufio.NewScanner(r)
+
+    for s.Scan(){
+        fmt.Println(s.Text())
+    }
+}
+
+func fib() func() int{
+    a,b := 0, 1
+    return func() int{
+        a,b = b,a+b
+        return a
+    }
+}
+
+func ExampleFuncInterface(){
+     var f intGen = fib()
+
+     printLine(&f)
+    //output:
+    //1
+    //1
+    //2
+    //3
+    //5
+    //8
+    //13
+    //21
+    //34
+    //55
+    //89
+    //144
+    //233
+    //377
+    //610
+    //987
+}
 
