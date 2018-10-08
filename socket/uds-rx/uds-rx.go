@@ -17,15 +17,15 @@ func main(){
         panic(err)
     }
     defer os.Remove(localAddr.String())
-    rxBuf := make([]byte, 1024*2)
+    rxBuf := make([]byte, 0, 1024*2)
     cnt := 0
-
 
     for{
         rx0, remoteAddr, err := conn.ReadFromUnix(rxBuf)
-        cnt += 1
-        fmt.Printf("%v: [len=%v return=%v]%v, err=%v\n",
-            remoteAddr, len(rxBuf),rx0, rxBuf,err)
+        cnt ++
+        rxBufS := fmt.Sprintf("%s", rxBuf)
+        fmt.Printf("cnt=%v %v: [len=%v return=%v]%v, err=%v\n",
+            cnt, remoteAddr, len(rxBuf),rx0, rxBufS,err)
     }
 
 
