@@ -49,6 +49,12 @@ type VpnHead struct {
     type_ uint8
     length uint16
 }
+type VpnAuth struct {
+    appkeyid [32]byte
+    uuid [36]byte
+    iv [16]byte
+    code [32]byte
+}
 type Context struct {
     // cnns
     tcpCnt uint64
@@ -135,10 +141,19 @@ func cnnRoutine(ctx * Context){
 
     tmo := time.Duration(time.Second * 3)
     atomic.AddInt32(&ctx.rtnCnt, 1)
+
+    authBytes := make([]byte,10)
+    _ = authBytes
+
+    hdr := VpnHead{
+        mark:VPN_PKT_MARK,
+        length:10,
+        type_:VPN_PKT_TYPE_AUTH,
+    }
+    authBytes = append(authBytes, toBEBytes(hdr)...)
+
     for !ctx.rtnStop {
         // only tcp connect
-        // maybe timeout
-        //conn, err := tls.Dial("tcp", raddr, &ctx.tlsConf)
         d := &net.Dialer{Timeout: tmo}
         conn, err := tls.DialWithDialer(d, "tcp", raddr, &ctx.tlsConf)
         atomic.AddUint64(&ctx.tcpCnt, 1)
@@ -152,6 +167,9 @@ func cnnRoutine(ctx * Context){
         }
 
         if conn != nil{
+            // write auth
+            conn.Write(authBytes)
+            //
             conn.CloseWrite()
             conn.Close()
             atomic.AddUint64(&ctx.tcpCntOk, 1)

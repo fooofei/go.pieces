@@ -10,11 +10,6 @@ import (
     "github.com/bifurcation/mint"
 )
 
-type VpnHead struct {
-    mark uint32
-    type_ uint8
-    length uint16
-}
 
 func hexView( v interface{}) string {
     var binBuf bytes.Buffer
