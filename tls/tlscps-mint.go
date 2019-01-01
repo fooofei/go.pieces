@@ -11,9 +11,12 @@ import (
 )
 
 
-func hexView( v interface{}) string {
+func mintHexView( v interface{}) string {
     var binBuf bytes.Buffer
-    binary.Write(&binBuf, binary.LittleEndian, v)
+    err := binary.Write(&binBuf, binary.LittleEndian, v)
+    if err != nil{
+        panic(err)
+    }
 
     //return hex.EncodeToString(binBuf.Bytes())
     return hex.Dump(binBuf.Bytes())

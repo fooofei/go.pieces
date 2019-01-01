@@ -91,9 +91,13 @@ func subContext(a * Context, b * Context, c * Context){
     c.rtnStopCnt = a.rtnStopCnt - b.rtnStopCnt
 }
 
-func hexView( v interface{}) string {
+func tlsHexView( v interface{}) string {
     var binBuf bytes.Buffer
-    binary.Write(&binBuf, binary.LittleEndian, v)
+    err := binary.Write(&binBuf, binary.LittleEndian, v)
+    if err != nil{
+        panic(err)
+    }
+
 
     //return hex.EncodeToString(binBuf.Bytes())
     return hex.Dump(binBuf.Bytes())
@@ -106,11 +110,11 @@ func DeepCopy(src interface {}, dst interface{}) error {
     if src == nil {
         return fmt.Errorf("src cannot be nil")
     }
-    bytes, err := json.Marshal(src)
+    bytes_, err := json.Marshal(src)
     if err != nil {
         return fmt.Errorf("Unable to marshal src: %s", err)
     }
-    err = json.Unmarshal(bytes, dst)
+    err = json.Unmarshal(bytes_, dst)
     if err != nil {
         return fmt.Errorf("Unable to unmarshal into dst: %s", err)
     }
@@ -119,13 +123,19 @@ func DeepCopy(src interface {}, dst interface{}) error {
 
 func toLEBytes(v interface {})  []byte {
     var binBuf bytes.Buffer
-    binary.Write(&binBuf, binary.LittleEndian, v)
+    err := binary.Write(&binBuf, binary.LittleEndian, v)
+    if err != nil{
+        panic(err)
+    }
     return binBuf.Bytes()
 }
 
 func toBEBytes(v interface{}) []byte {
     var binBuf bytes.Buffer
-    binary.Write(&binBuf, binary.BigEndian, v)
+    err := binary.Write(&binBuf, binary.BigEndian, v)
+    if err != nil{
+        panic(err)
+    }
     return binBuf.Bytes()
 }
 
@@ -168,10 +178,10 @@ func cnnRoutine(ctx * Context){
 
         if conn != nil{
             // write auth
-            conn.Write(authBytes)
+            _, _ = conn.Write(authBytes)
             //
-            conn.CloseWrite()
-            conn.Close()
+            _ = conn.CloseWrite()
+            _ = conn.Close()
             atomic.AddUint64(&ctx.tcpCntOk, 1)
         }
     }
