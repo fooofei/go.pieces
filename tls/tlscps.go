@@ -19,42 +19,11 @@ import (
     "syscall"
 )
 
-const (
-    VPN_PKT_MARK = 0xFEFCEFBD
-    VPN_PKT_TYPE_AUTH = 1
-    VPN_PKT_TYPE_PLD = 2
-    VPN_PKT_TYPE_KEEPALIVE = 3
-    VPN_PKT_TYPE_CNN_STATUS  = 4
-
-    VPN_APPKEYID_MAX_SIZE = 0x20
-    VPN_TERMID_MAX_SIZE = 0x24
-    VPN_RS_STATUS_CONNECT = 1
-    VPN_RS_STATUS_CLOSE = 2
-    VPN_RS_STATUS_CLOSED = 3
-
-    myappkeyid = "\x36\x62\x61\x37\x32\x34\x64\x35\x33\x31\x33\x30\x34\x34\x39" +
-        "\x34\x39\x65\x65\x66\x37\x64\x32\x35\x66\x61\x65\x34\x32\x62\x35\x32"
-    myappkey="d1406b81635849630c9b2e40884296e2"
-    mytermid="\x31\x32\x33\x34\x35\x36\x37\x38\x39\x30\x61\x62\x63\x64\x65" +
-        "\x66\x31\x32\x33\x34\x35\x36\x37\x38\x39\x30\x61\x62\x63\x64\x65\x66\x66\x66\x66\x66"
-
-)
 // globals
 var raddr string
 var routines int
 var interval int
 
-type VpnHead struct {
-    mark uint32
-    type_ uint8
-    length uint16
-}
-type VpnAuth struct {
-    appkeyid [32]byte
-    uuid [36]byte
-    iv [16]byte
-    code [32]byte
-}
 type Context struct {
     // cnns
     tcpCnt uint64
@@ -152,16 +121,6 @@ func cnnRoutine(ctx * Context){
     tmo := time.Duration(time.Second * 3)
     atomic.AddInt32(&ctx.rtnCnt, 1)
 
-    authBytes := make([]byte,10)
-    _ = authBytes
-
-    hdr := VpnHead{
-        mark:VPN_PKT_MARK,
-        length:10,
-        type_:VPN_PKT_TYPE_AUTH,
-    }
-    authBytes = append(authBytes, toBEBytes(hdr)...)
-
     for !ctx.rtnStop {
         // only tcp connect
         d := &net.Dialer{Timeout: tmo}
@@ -177,8 +136,8 @@ func cnnRoutine(ctx * Context){
         }
 
         if conn != nil{
-            // write auth
-            _, _ = conn.Write(authBytes)
+            // write other bytes
+            //_, _ = conn.Write(authBytes)
             //
             _ = conn.CloseWrite()
             _ = conn.Close()
@@ -250,18 +209,10 @@ func main(){
     //
     log.Printf("use routines=%v to raddr= %v\n" ,routines, raddr)
     //
-    
-
 
     ibuf := make([]byte, 128*1024)
     _ = ibuf
 
-    hdr := VpnHead{
-        mark:VPN_PKT_MARK,
-        type_: VPN_PKT_TYPE_AUTH,
-        length:0,
-    }
-    _ = hdr
     ctx := Context{}
     ctx.hitErrs = make(chan string, 3)
     ctx.tlsConf = tls.Config{InsecureSkipVerify:true}
