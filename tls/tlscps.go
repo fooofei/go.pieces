@@ -116,10 +116,11 @@ func init(){
 }
 
 func cnnRoutine(ctx * Context){
-    ctx.wg.Add(1)
+    defer ctx.wg.Done()
 
     tmo := time.Duration(time.Second * 3)
     atomic.AddInt32(&ctx.rtnCnt, 1)
+    defer atomic.AddInt32(&ctx.rtnStopCnt, 1)
 
     for !ctx.rtnStop {
         // only tcp connect
@@ -144,8 +145,7 @@ func cnnRoutine(ctx * Context){
             atomic.AddUint64(&ctx.tcpCntOk, 1)
         }
     }
-    atomic.AddInt32(&ctx.rtnStopCnt, 1)
-    ctx.wg.Done()
+
 }
 
 func statRoutine(ctx * Context) {
@@ -161,7 +161,7 @@ func statRoutine(ctx * Context) {
     itv := interval
     cnt := 0
     hitTime = time.Now()
-    ctx.wg.Add(1)
+    defer ctx.wg.Done()
 
     for !ctx.rtnStop {
         var buf bytes.Buffer
@@ -199,7 +199,7 @@ func statRoutine(ctx * Context) {
         cnt += 1
     }
 
-    ctx.wg.Done()
+
 }
 
 
@@ -209,9 +209,6 @@ func main(){
     //
     log.Printf("use routines=%v to raddr= %v\n" ,routines, raddr)
     //
-
-    ibuf := make([]byte, 128*1024)
-    _ = ibuf
 
     ctx := Context{}
     ctx.hitErrs = make(chan string, 3)
@@ -223,18 +220,21 @@ func main(){
     log.Printf("start routines")
 
     for i :=0; i< routines; i+= 1 {
+        ctx.wg.Add(1)
         go cnnRoutine(&ctx)
     }
 
     log.Printf("all routines started, go stat")
-    
+
+    ctx.wg.Add(1)
     go func(ctx * Context){
-        ctx.wg.Add(1)
+        defer ctx.wg.Done()
+        //
         <- ctx.sigCh
         ctx.rtnStop=true
-        ctx.wg.Done()
         log.Printf("[!] stop all")
     }(&ctx)
+    ctx.wg.Add(1)
     statRoutine(&ctx)
     
     
