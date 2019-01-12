@@ -100,6 +100,9 @@ func tcpReadingOtherClose(){
 
      正在读，其他routine 关闭了这个 conn
 
+    will be error use of closed network connection
+    type = *net.OpError
+
     */
     raddr := "127.0.0.1:8869"
     cnn, err := net.DialTimeout("tcp", raddr, time.Duration(3)*time.Second)
@@ -178,6 +181,6 @@ func tcpBeforeReadClose(){
 func main(){
     // tcpReadTimeout()
     // tcpCloseWhileReading()
-    // tcpReadingOtherClose()
-    tcpBeforeReadClose()
+     tcpReadingOtherClose()
+    //tcpBeforeReadClose()
 }
