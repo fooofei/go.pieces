@@ -2,8 +2,8 @@ package main
 
 import (
     "bytes"
+    "context"
     "encoding/binary"
-    "errors"
     "flag"
     "fmt"
     "io"
@@ -18,34 +18,84 @@ import (
 )
 
 type FlowCtx struct {
-    Raddr  string
-    MsgCh  chan string
-    ErrsCh chan error
-    Exit   bool
-    ExitCh chan struct{}
-    SigCh  chan os.Signal
-    Wg     *sync.WaitGroup
-    MsgEnq uint32
-    MsgDeq uint32
+    Raddr   string
+    MsgCh   chan string
+    ErrsCh  chan error
+    Exit    bool
+    ExitCh  chan struct{}
+    SigCh   chan os.Signal
+    WaitCtx context.Context
+    Wg      *sync.WaitGroup
+    MsgEnq  uint32
+    MsgDeq  uint32
 }
 
-func Stream2Msg(ctx *FlowCtx) {
+// recv stream bytes from tcp peer
+// convert it to msg
+// msg format is [uint16 + msgbytes]
+func Stream2Msg(ctx *FlowCtx, cnn net.Conn) {
+    for {
+        msgHdr := make([]byte, 2)
+        n, err := io.ReadFull(cnn, msgHdr)
+        if err != nil {
+            if err != io.EOF {
+                select {
+                case ctx.ErrsCh <- err:
+                default:
+                }
+            }
+            break
+        }
+        if n != len(msgHdr) {
+            break
+        }
+        var msgLen uint16
+        err = binary.Read(bytes.NewReader(msgHdr), binary.BigEndian, &msgLen)
+        if err != nil {
+            break
+        }
+
+        msg := make([]byte, msgLen)
+        n, err = io.ReadFull(cnn, msg)
+        if err != nil {
+            if err != io.EOF {
+                select {
+                case ctx.ErrsCh <- err:
+                default:
+                }
+            }
+            break
+        }
+        if n != len(msg) {
+            break
+        }
+
+        select {
+        case <-ctx.ExitCh:
+        case ctx.MsgCh <- string(msg):
+            atomic.AddUint32(&ctx.MsgEnq, 1)
+        }
+    }
+}
+func Dial(ctx *FlowCtx) {
     defer ctx.Wg.Done()
     for {
         d := net.Dialer{Timeout: time.Duration(2) * time.Second}
-        cnn, err := d.Dial("tcp", ctx.Raddr)
+        cnn, err := d.DialContext(ctx.WaitCtx, "tcp", ctx.Raddr)
         if err != nil {
-            v := errors.New(fmt.Sprintf("dial %v err= %v", ctx.Raddr, err))
+            v := fmt.Errorf("dial %v err= %v", ctx.Raddr, err)
             select {
             case ctx.ErrsCh <- v:
             default:
             }
         }
+        // this is what we exit
         if ctx.Exit {
             log.Printf("dial got exit")
             break
         }
         if cnn == nil {
+            // wait for a moment to redial
             select {
             case <-time.After(time.Second * 3):
             case <-ctx.ExitCh:
@@ -55,8 +105,10 @@ func Stream2Msg(ctx *FlowCtx) {
         //
         // log.Printf("dialer got cnn=%v", cnn)
         ctx.Wg.Add(1)
-        closeCh := make(chan struct{})
+        cnnClosedCh := make(chan struct{})
         go func(ctx *FlowCtx, cnn net.Conn, closeCh chan struct{}) {
+            // when program exit, we need close cnn
+            // when cnn close, we need know
             select {
             case <-ctx.ExitCh:
             case <-closeCh:
@@ -64,55 +116,16 @@ func Stream2Msg(ctx *FlowCtx) {
             ctx.Wg.Done()
             _ = cnn.Close()
             // log.Printf("dialer sub routine close cnn")
-        }(ctx, cnn, closeCh)
+        }(ctx, cnn, cnnClosedCh)
 
-        for {
-            msgHdr := make([]byte, 2)
-            n, err := io.ReadFull(cnn, msgHdr)
-            if err != nil {
-                if err != io.EOF {
-                    select {
-                    case ctx.ErrsCh <- err:
-                    default:
-                    }
-                }
-
-                break
-            }
-            if n != len(msgHdr) {
-                break
-            }
-            var msgLen uint16
-            err = binary.Read(bytes.NewReader(msgHdr), binary.BigEndian, &msgLen)
-            if err != nil {
-                break
-            }
-
-            msg := make([]byte, msgLen)
-            n, err = io.ReadFull(cnn, msg)
-            if err != nil {
-                if err != io.EOF {
-                    select {
-                    case ctx.ErrsCh <- err:
-                    default:
-                    }
-                }
-                break
-            }
-            if n != len(msg) {
-                break
-            }
-
-            select {
-            case <-ctx.ExitCh:
-            case ctx.MsgCh <- string(msg):
-                atomic.AddUint32(&ctx.MsgEnq, 1)
-            }
-        }
-
+        // when the cnn broken, we need redial
+        // if move Stream2Msg to sub routine
+        //   we also need to know
+        //   whether the cnn is broken or not when reading
+        Stream2Msg(ctx, cnn)
         // notify the sub routine exit
-        close(closeCh)
-        if ctx.Exit{
+        close(cnnClosedCh)
+        if ctx.Exit {
             break
         }
     }
@@ -121,12 +134,13 @@ func Stream2Msg(ctx *FlowCtx) {
 
 func main() {
 
-    raddr := flag.String("raddr", "","receiver of flow msg")
+    raddr := flag.String("raddr", "", "sender addr of flow msg")
     flag.Parse()
-    if *raddr == ""{
+    if *raddr == "" {
         flag.Usage()
         return
     }
+    var cancel context.CancelFunc
     flowCtx := new(FlowCtx)
     flowCtx.ExitCh = make(chan struct{})
     flowCtx.Wg = new(sync.WaitGroup)
@@ -134,11 +148,14 @@ func main() {
     flowCtx.Raddr = *raddr
     flowCtx.MsgCh = make(chan string, 1000*1000)
     flowCtx.SigCh = make(chan os.Signal, 1)
+    flowCtx.WaitCtx, cancel = context.WithCancel(context.Background())
 
     flowCtx.Wg.Add(1)
     signal.Notify(flowCtx.SigCh, os.Interrupt)
     signal.Notify(flowCtx.SigCh, syscall.SIGTERM)
     go func(ctx *FlowCtx) {
+        // only need to wait signal
+        // we run forever
         <-ctx.SigCh
         ctx.Exit = true
         close(ctx.ExitCh)
@@ -146,7 +163,7 @@ func main() {
     }(flowCtx)
 
     flowCtx.Wg.Add(1)
-    go Stream2Msg(flowCtx)
+    go Dial(flowCtx)
 
 loop:
     for {
@@ -154,10 +171,11 @@ loop:
         case err := <-flowCtx.ErrsCh:
             log.Printf("got err =%v", err)
         case msg := <-flowCtx.MsgCh:
-            fmt.Printf("[%v]--[%v]\n",flowCtx.MsgDeq, msg)
+            fmt.Printf("[%v]--[%v]\n", flowCtx.MsgDeq, msg)
             atomic.AddUint32(&flowCtx.MsgDeq, 1)
         case <-flowCtx.ExitCh:
             log.Printf("main thread got exit, break loop")
+            cancel()
             break loop
         }
     }
