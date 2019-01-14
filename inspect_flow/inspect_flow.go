@@ -4,6 +4,7 @@ import (
     "bytes"
     "context"
     "encoding/binary"
+    "encoding/json"
     "flag"
     "fmt"
     "io"
@@ -77,10 +78,10 @@ func Stream2Msg(ctx *FlowCtx, cnn net.Conn) {
         }
     }
 }
-func Dial(ctx *FlowCtx) {
+func Dial(ctx *FlowCtx, filter map[string]interface{}) {
     defer ctx.Wg.Done()
     for {
-        d := net.Dialer{Timeout: time.Duration(2) * time.Second}
+        d := net.Dialer{}
         cnn, err := d.DialContext(ctx.WaitCtx, "tcp", ctx.Raddr)
         if err != nil {
             v := fmt.Errorf("dial %v err= %v", ctx.Raddr, err)
@@ -122,6 +123,8 @@ func Dial(ctx *FlowCtx) {
         // if move Stream2Msg to sub routine
         //   we also need to know
         //   whether the cnn is broken or not when reading
+        tx, err := json.Marshal(filter)
+        _, _ = cnn.Write(tx)
         Stream2Msg(ctx, cnn)
         // notify the sub routine exit
         close(cnnClosedCh)
@@ -135,12 +138,15 @@ func Dial(ctx *FlowCtx) {
 func main() {
 
     raddr := flag.String("raddr", "", "sender addr of flow msg")
+    sdk_raddr := flag.String("sdk_raddr", "", "filter sdk raddr")
+    rs_raddr := flag.String("rs_raddr", "", "filter rs raddr")
     flag.Parse()
     if *raddr == "" {
         flag.Usage()
         return
     }
     var cancel context.CancelFunc
+    filter := make(map[string]interface{})
     flowCtx := new(FlowCtx)
     flowCtx.ExitCh = make(chan struct{})
     flowCtx.Wg = new(sync.WaitGroup)
@@ -149,6 +155,16 @@ func main() {
     flowCtx.MsgCh = make(chan string, 1000*1000)
     flowCtx.SigCh = make(chan os.Signal, 1)
     flowCtx.WaitCtx, cancel = context.WithCancel(context.Background())
+    if *sdk_raddr != "" {
+        sdk := make(map[string]interface{})
+        sdk["Raddr"] = *sdk_raddr
+        filter["Sdk"] = sdk
+    }
+    if *rs_raddr != "" {
+        rs := make(map[string]interface{})
+        rs["Raddr"] = *rs_raddr
+        filter["Rs"] = rs
+    }
 
     flowCtx.Wg.Add(1)
     signal.Notify(flowCtx.SigCh, os.Interrupt)
@@ -163,7 +179,7 @@ func main() {
     }(flowCtx)
 
     flowCtx.Wg.Add(1)
-    go Dial(flowCtx)
+    go Dial(flowCtx, filter)
 
 loop:
     for {

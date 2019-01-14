@@ -206,3 +206,7 @@ func TestHash(){
         fmt.Printf("%x %v\n",result[path],shortName)
     }
 }
+
+func main(){
+
+}

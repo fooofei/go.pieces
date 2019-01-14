@@ -4,7 +4,7 @@
 
 // download from https://golang.org/doc/codewalk/sharemem/
 
-package main
+package go_pieces
 
 import (
     "log"

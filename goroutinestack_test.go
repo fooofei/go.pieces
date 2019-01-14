@@ -1,4 +1,4 @@
-package main
+package go_pieces
 
 
 import "fmt"
@@ -9,8 +9,7 @@ type S struct {
 
 // String implements the fmt.Stringer interface
 // compile error
-// # github.com/fooofei/go_pieces
-//./goroutinestack_test.go:12: Sprintf format %s with arg s causes recursive String method call
+// error Sprintf format %s with arg s causes recursive String method call
 func (s *S) String() string {
 	//return fmt.Sprintf("%s", s) // Sprintf will call s.String()
 	return ""
@@ -22,4 +21,6 @@ func ExampleGoroutineStackOverflow() {
 	fmt.Println(s)
 	// runtime: goroutine stack exceeds 1000000000-byte limit
 	//fatal error: stack overflow
+	_ = s
+	//output:
 }

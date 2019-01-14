@@ -30,6 +30,8 @@ def main():
 
             while not brk:
                 try:
+                    data = f.recv(128*1024)
+                    print(data)
                     msg = 'helloworldssssssss'
                     ctnt = htons(len(msg))
                     ctnt = st_pack('H',ctnt)

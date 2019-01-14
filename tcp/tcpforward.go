@@ -1,6 +1,7 @@
 package main
 
 import (
+    "context"
     "io"
     "log"
     "net"
@@ -8,6 +9,7 @@ import (
     "os/signal"
     "sync"
     "sync/atomic"
+    "syscall"
     "time"
 )
 
@@ -25,262 +27,164 @@ https://gist.github.com/zupzup/14ea270252fbb24332c5e9ba978a8ade
 */
 
 type LsnCtx struct {
-    lsnAddr      string
-    addTunnelCnt uint32
-    subTunnelCnt uint32
-    grpAddr      string
+    LsnAddr      string
+    AddTunnelCnt uint32
+    SubTunnelCnt uint32
+    GrpAddr      string
 }
 
-type Context struct {
-    raddr        string
-    addTunnelCnt uint32
-    subTunnelCnt uint32
-    hitErrs      chan error
-    stopCh       chan struct {}
-    stop         bool
-    wg           sync.WaitGroup
-    lsns         []LsnCtx
+type GlbContext struct {
+    Raddr        string
+    AddTunnelCnt uint32
+    SubTunnelCnt uint32
+    HitErrs      chan error
+    ExitCh       chan struct{}
+    Exit         bool
+    Wg           sync.WaitGroup
+    WaitCtx      context.Context
+    Lsns         []LsnCtx
 }
 
-func ctxEnqErr(ctx *Context, err error) {
-    select {
-    case ctx.hitErrs <- err:
-    default:
-    }
-}
+func listenRoutine(ctx *GlbContext, lsnCtx *LsnCtx) {
+    defer ctx.Wg.Done()
+    defer log.Printf("listener[%v] exit", lsnCtx.LsnAddr)
 
-func listenRoutine(ctx *Context, lsnCtx *LsnCtx) {
-    defer ctx.wg.Done()
-    defer log.Printf("listener[%v] exit", lsnCtx.lsnAddr)
-
-    laddr, err := net.ResolveTCPAddr("tcp", lsnCtx.lsnAddr)
+    tcpLsn, err := net.Listen("tcp", lsnCtx.LsnAddr)
     if err != nil {
         panic(err)
     }
-    tcpLsn, err := net.ListenTCP("tcp", laddr)
-    if err != nil {
-        panic(err)
-    }
-    defer func() {
-        _ = tcpLsn.Close()
-    }()
-
     log.Printf("listener[%v] working", tcpLsn.Addr())
-
-    lsnCloseCh := make(chan struct{},1)
-
-    ctx.wg.Add(1)
-    go func() {
-        defer ctx.wg.Done()
-        defer close(lsnCloseCh)
+    ctx.Wg.Add(1)
+    go func(ctx *GlbContext, lsnCtx *LsnCtx, tcpLsn net.Listener) {
+        defer ctx.Wg.Done()
         //
         for {
-            appConn, err := tcpLsn.Accept()
+            appCnn, err := tcpLsn.Accept()
             if err != nil {
-                ctxEnqErr(ctx, err)
+                select {
+                case ctx.HitErrs <- err:
+                default:
+                }
             }
-            if ctx.stop{
+            if ctx.Exit {
                 return
             }
-            log.Printf("accept %v-%v",appConn.LocalAddr(), appConn.RemoteAddr())
-            ctx.wg.Add(1)
-            go tunnelRoutine(ctx, lsnCtx, appConn)
+            log.Printf("accept %v-%v", appCnn.LocalAddr(), appCnn.RemoteAddr())
+            ctx.Wg.Add(1)
+            go tunnelRoutine(ctx, lsnCtx, appCnn)
         }
-    }()
+    }(ctx, lsnCtx, tcpLsn)
 
+    // only program exit will stop listen
     select {
-    case <- ctx.stopCh:
+    case <-ctx.ExitCh:
+        // wakeup the block of accept()
         _ = tcpLsn.Close()
-    case <- lsnCloseCh:
     }
 }
-/*
-func tmoRead(cnn net.Conn, b []byte) (int, error) {
-    dta := time.Duration(1) * time.Second
-    _ = cnn.SetWriteDeadline(time.Now().Add(dta))
-    n, err := cnn.Read(b)
-    _ = cnn.SetReadDeadline(time.Time{})
-    return n, err
+
+// TCP 是双工，单方向通道坏掉，另一个方向的还可能会好
+func app2tunn(appCnn io.ReadCloser, tunCnn io.WriteCloser, ctx *GlbContext, tunWg *sync.WaitGroup) {
+    defer ctx.Wg.Done()
+    defer tunWg.Done()
+    //
+    ibuf := make([]byte, 128*1024)
+    for {
+        // only io.EOF stop read
+        n, err := appCnn.Read(ibuf)
+        if err != nil {
+            tcpCnn, ok := tunCnn.(*net.TCPConn)
+            if ok {
+                _ = tcpCnn.CloseWrite()
+            } else {
+                // force close
+                // _ = tunCnn.Close()
+            }
+            return
+        }
+        if ctx.Exit {
+            // stop program
+            return
+        }
+        if n <= 0 {
+            continue
+        }
+        // TODO add custom protocol
+        n, err = tunCnn.Write(ibuf[:n])
+        if err != nil {
+            tcpCnn, ok := appCnn.(*net.TCPConn)
+            if ok {
+                _ = tcpCnn.CloseRead()
+            } else {
+                // force
+                //_  = appCnn.Close()
+            }
+            return
+        }
+    }
 }
 
-func tmoWrite(cnn net.Conn, b []byte) (int, error) {
-    dta := time.Duration(1) * time.Second
-    _ = cnn.SetWriteDeadline(time.Now().Add(dta))
-    n, err := cnn.Write(b)
-    _ = cnn.SetReadDeadline(time.Time{})
-    return n, err
-}
-*/
+func tunnelRoutine(ctx *GlbContext, lsnCtx *LsnCtx, appConn net.Conn) {
+    // 试错。read 带 deadline 超时，这个设计很差，太复杂。
+    // 如果数据流是以msg为单位，那么会遇到不到一个msg的时候，read超时返回，
+    // 又需要处理读取偏移。
+    // read 带超时是为了应对无法退出的情况，golang中，可以在其他goroutine 中
+    // close 这个 conn达到通知的效果，这样简化设计
+    defer ctx.Wg.Done()
 
-func tunnelRoutine(ctx *Context, lsnCtx *LsnCtx, appConn net.Conn) {
-    /**
-    试错。read 带 deadline 超时，这个设计很差，太复杂。
-    如果数据流是以msg为单位，那么会遇到不到一个msg的时候，read超时返回，
-    又需要处理读取偏移。
-    read 带超时是为了应对无法退出的情况，golang中，可以在其他goroutine 中
-    close 这个 conn达到通知的效果，这样简化设计
-    */
-    defer ctx.wg.Done()
+    atomic.AddUint32(&ctx.AddTunnelCnt, 1)
+    defer atomic.AddUint32(&ctx.SubTunnelCnt, 1)
 
-    atomic.AddUint32(&ctx.addTunnelCnt, 1)
-    defer atomic.AddUint32(&ctx.subTunnelCnt, 1)
-
-    atomic.AddUint32(&lsnCtx.addTunnelCnt, 1)
-    defer atomic.AddUint32(&lsnCtx.subTunnelCnt, 1)
-
-    d := net.Dialer{Timeout: time.Duration(3) * time.Second}
+    atomic.AddUint32(&lsnCtx.AddTunnelCnt, 1)
+    defer atomic.AddUint32(&lsnCtx.SubTunnelCnt, 1)
 
     defer func() {
-        err := appConn.Close()
-        if err != nil {
-            ctxEnqErr(ctx, err)
-        }
+        _ = appConn.Close()
     }()
 
     // TODO use tls
-    tunConn, err := d.Dial("tcp", ctx.raddr)
+    d := new(net.Dialer)
+    tunConn, err := d.DialContext(ctx.WaitCtx, "tcp", ctx.Raddr)
     if err != nil {
-        ctxEnqErr(ctx, err)
+        select {
+        case ctx.HitErrs <- err:
+        default:
+        }
+        return
     }
-    if tunConn == nil {
+    if ctx.Exit {
         return
     }
     defer func() {
-        err := tunConn.Close()
-        if err != nil {
-            ctxEnqErr(ctx, err)
-        }
+        _ = tunConn.Close()
     }()
 
-
-    tunWg := sync.WaitGroup{}
-
-
-    closeAllCnn := func() {
-        _ = tunConn.Close()
-        _ = appConn.Close()
-    }
-    _ = closeAllCnn
+    tunCloseCh := make(chan struct{})
+    tunWg := new(sync.WaitGroup)
     // app->tunnel
     // 如果Add(1) 放在 routine里，就有可能遇到 wait 时还没+1的情况就会退出
-    ctx.wg.Add(1)
+    ctx.Wg.Add(1)
     tunWg.Add(1)
-    go func() {
-        defer ctx.wg.Done()
-        defer tunWg.Done()
-        //
-        ibuf := make([]byte, 128*1024)
-        for {
-            // only io.EOF stop read
-            n,err := appConn.Read(ibuf)
-            if ctx.stop {
-                // stop program
-                return
-            }
-
-            if n > 0 {
-                // TODO add custom protocol
-                for idx := 0; idx < n; {
-                    // only Timeout continue write
-                    writed, err := tunConn.Write(ibuf[idx:n])
-                    if ctx.stop {
-                        // stop program
-                        return
-                    }
-
-                    if err != nil {
-                        ctxEnqErr(ctx, err)
-                        tcpCnn, ok := appConn.(*net.TCPConn)
-                        if ok {
-                            _ = tcpCnn.CloseRead()
-                        }
-                        //
-                        log.Printf("app->tunnel write err=%v", err)
-                        //
-                        return
-                    }
-                    idx += writed
-                }
-            } else if err == io.EOF {
-                tcpCnn, ok := tunConn.(*net.TCPConn)
-                if ok {
-                    _ = tcpCnn.CloseWrite()
-                }
-                //
-                log.Printf("app->tunnel read err=%v", err)
-                //
-                return
-            } else if err != nil{
-                ctxEnqErr(ctx, err)
-            }
-
-        }
-
-    }()
-    // tunnel ->app
-    ctx.wg.Add(1)
+    go app2tunn(appConn, tunConn, ctx, tunWg)
+    tunn2app := app2tunn
+    ctx.Wg.Add(1)
     tunWg.Add(1)
-    go func() {
-        defer ctx.wg.Done()
-        defer tunWg.Done()
-        //
-        buf := make([]byte, 128*1024)
-        for{
-            n,err := tunConn.Read(buf)
-            if ctx.stop{
-                // stop program
-                return
-            }
-            if n>0 {
-                for idx:=0; idx<n; {
-                    writed,err := appConn.Write(buf[idx:n])
-                    if ctx.stop{
-                        return
-                    }
-                    if err != nil{
-                        ctxEnqErr(ctx, err)
-                        tcpCnn, ok := tunConn.(*net.TCPConn)
-                        if ok {
-                            _ = tcpCnn.CloseRead()
-                        }
-                        //
-                        log.Printf("tunnel->app write err=%v", err)
-                        //
-                        return
-                    }
-                    idx += writed
-                }
+    go tunn2app(tunConn, appConn, ctx, tunWg)
 
-            } else if err == io.EOF {
-                tcpCnn,ok := appConn.(*net.TCPConn)
-                if ok {
-                    _ = tcpCnn.CloseWrite()
-                }
-                //
-                log.Printf("tunnel->app read err=%v", err)
-                //
-                return
-            } else if err != nil{
-                ctxEnqErr(ctx, err)
-            }
-
-
-        }
-    }()
-
-    tunCh := make(chan struct{},1)
+    ctx.Wg.Add(1)
     go func() {
         tunWg.Wait()
-        close(tunCh)
+        close(tunCloseCh)
+        ctx.Wg.Done()
     }()
 
-
     select {
-    case <-ctx.stopCh:
+    case <-ctx.ExitCh:
         _ = tunConn.Close()
         _ = appConn.Close()
         log.Printf("tunnel routine rcv stopCh")
-    case <- tunCh:
+    case <-tunCloseCh:
+        // app2tun tun2app all closed
         log.Printf("tunnel routine rcv tunCh")
     }
 
@@ -288,53 +192,49 @@ func tunnelRoutine(ctx *Context, lsnCtx *LsnCtx, appConn net.Conn) {
 }
 
 func main() {
+    var cancel context.CancelFunc
+    ctx := new(GlbContext)
+    ctx.Raddr = "127.0.0.1:8869"
+    // can be more, custom
+    ctx.HitErrs = make(chan error, 4)
+    ctx.ExitCh = make(chan struct{})
+    ctx.Lsns = make([]LsnCtx, 1)
+    ctx.WaitCtx, cancel = context.WithCancel(context.Background())
 
-    ctx := new(Context)
-    ctx.raddr = "127.0.0.1:8869"
-    ctx.hitErrs = make(chan error, 4)
-    ctx.stopCh = make(chan  struct{},1)
-
-    ctx.lsns = make([]LsnCtx, 1)
-
-    ctx.lsns[0].lsnAddr = "127.0.0.1:8879"
+    ctx.Lsns[0].LsnAddr = "127.0.0.1:8879"
 
     // setup signal
-    sigCh := make(chan os.Signal,1)
+    sigCh := make(chan os.Signal, 1)
     signal.Notify(sigCh, os.Interrupt)
+    signal.Notify(sigCh, syscall.SIGTERM)
+    ctx.Wg.Add(1)
     go func() {
-        //
-        ctx.wg.Add(1)
-        defer ctx.wg.Done()
-        //
-        <- sigCh
-        log.Printf("rcv signal, goto close")
-        ctx.stop=true
-        close(ctx.stopCh)
+        v := <-sigCh
+        log.Printf("rcv signal %v, goto close", v)
+        ctx.Exit = true
+        close(ctx.ExitCh)
+        ctx.Wg.Done()
     }()
 
-    for _,lsn := range ctx.lsns{
-        ctx.wg.Add(1)
-        go listenRoutine(ctx,&lsn)
+    for i := 0; i < len(ctx.Lsns); i += 1 {
+        ctx.Wg.Add(1)
+        go listenRoutine(ctx, &ctx.Lsns[i])
     }
 
-    go func() {
-        ctx.wg.Add(1)
-        defer ctx.wg.Done()
-
-        for{
-            select {
-            case <- ctx.stopCh:
-                return
-            case err:= <- ctx.hitErrs:
-                log.Printf("stat err=%v",err)
-            case <- time.After(time.Second*3):
-                log.Printf("tun cnt= add%v sub%v", ctx.addTunnelCnt, ctx.subTunnelCnt)
-            }
+    // stat
+loop:
+    for {
+        select {
+        case <-ctx.ExitCh:
+            cancel()
+            break loop
+        case err := <-ctx.HitErrs:
+            log.Printf("err= %v", err)
+        case <-time.After(time.Second * 3):
+            log.Printf("tun cnt (add= %v sub= %v)", ctx.AddTunnelCnt, ctx.SubTunnelCnt)
         }
-    }()
-
-    log.Printf("main waiting")
-    ctx.wg.Wait()
-
-    log.Printf("exit\n")
+    }
+    log.Printf("main wait sub")
+    ctx.Wg.Wait()
+    log.Printf("main exit\n")
 }

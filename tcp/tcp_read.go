@@ -39,7 +39,7 @@ func tcpReadTimeout() {
     n, err := cnn.Read(buf)
     _ = cnn.SetReadDeadline(time.Time{})
 
-    opErr,ok := err.(*net.OpError)
+    opErr, ok := err.(*net.OpError)
     if ok {
         log.Printf("err = opErr and Timeout()=%v", opErr.Timeout())
         log.Printf("err = opErr and Temporary()=%v", opErr.Temporary())
@@ -49,7 +49,7 @@ func tcpReadTimeout() {
 
 }
 
-func tcpCloseWhileReading(){
+func tcpCloseWhileReading() {
     /**
     make a tcp server
     ncat -l -t -k -v 8869
@@ -83,7 +83,7 @@ func tcpCloseWhileReading(){
     // goto read a closed tcp
     // watch read err
     n, err := cnn.Read(buf)
-    opErr,ok := err.(*net.OpError)
+    opErr, ok := err.(*net.OpError)
     if ok {
         log.Printf("err = opErr and Timeout()=%v", opErr.Timeout())
         log.Printf("err = opErr and Temporary()=%v", opErr.Temporary())
@@ -93,7 +93,7 @@ func tcpCloseWhileReading(){
 
 }
 
-func tcpReadingOtherClose(){
+func tcpReadingOtherClose() {
     /**
     make a tcp server
     ncat -l -t -k -v 8869
@@ -118,7 +118,7 @@ func tcpReadingOtherClose(){
 
     go func() {
         log.Printf("other routine enter sleep 5s")
-        time.Sleep(time.Duration(5)*time.Second)
+        time.Sleep(time.Duration(5) * time.Second)
         log.Printf("other routine leave sleep")
         log.Printf("other routine close the cnn")
         _ = cnn.Close()
@@ -127,7 +127,7 @@ func tcpReadingOtherClose(){
     log.Printf("main routine block on the read")
     n, err := cnn.Read(buf)
 
-    opErr,ok := err.(*net.OpError)
+    opErr, ok := err.(*net.OpError)
     if ok {
         log.Printf("err = opErr and Timeout()=%v", opErr.Timeout())
         log.Printf("err = opErr and Temporary()=%v", opErr.Temporary())
@@ -137,7 +137,7 @@ func tcpReadingOtherClose(){
 
 }
 
-func tcpBeforeReadClose(){
+func tcpBeforeReadClose() {
     /**
     make a tcp server
     ncat -l -t -k -v 8869
@@ -165,7 +165,7 @@ func tcpBeforeReadClose(){
     buf := make([]byte, 8*1024)
     log.Printf("main routine block on the read")
     n, err := cnn.Read(buf)
-    opErr,ok := err.(*net.OpError)
+    opErr, ok := err.(*net.OpError)
     if ok {
         log.Printf("err = opErr and Timeout()=%v", opErr.Timeout())
         log.Printf("err = opErr and Temporary()=%v", opErr.Temporary())
@@ -178,9 +178,9 @@ func tcpBeforeReadClose(){
     // err=close tcp 127.0.0.1:58719->127.0.0.1:8869: use of closed network connection
 }
 
-func main(){
+func main() {
     // tcpReadTimeout()
     // tcpCloseWhileReading()
-     tcpReadingOtherClose()
+    tcpReadingOtherClose()
     //tcpBeforeReadClose()
 }
