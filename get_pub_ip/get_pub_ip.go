@@ -110,6 +110,7 @@ func main() {
         "https://api.ipify.org",
         "https://ip.seeip.org",
         "https://ifconfig.me/ip",
+        "https://ifconfig.co/ip",
     }
     log.Printf("pid= %v", os.Getpid())
     ctx := new(ParallelHttpCtx)
@@ -128,7 +129,7 @@ func main() {
     go waitAllResultRoutine(ctx, len(pubSrvs))
     // wait timeout or all done
     select {
-    case <-time.After(time.Second * 20):
+    case <-time.After(time.Second * 2):
         log.Printf("main timeup cancel it beforehand")
         cancel()
     case <-ctx.AllResultDoneCh:
@@ -137,6 +138,7 @@ func main() {
     ctx.Wg.Wait()
     //
     log.Printf("fetch result cnt=%v from %v", ctx.Results.Len(), len(pubSrvs))
-    fmt.Printf("The pub ip= %v\n", getTop(ctx))
+    //fmt.Printf("The pub ip= %v\n", getTop(ctx))
+    fmt.Print("%v", getTop(ctx))
     log.Printf("main exit")
 }
