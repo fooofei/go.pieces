@@ -139,6 +139,6 @@ func main() {
     //
     log.Printf("fetch result cnt=%v from %v", ctx.Results.Len(), len(pubSrvs))
     //fmt.Printf("The pub ip= %v\n", getTop(ctx))
-    fmt.Print("%v", getTop(ctx))
+    fmt.Printf("%v", getTop(ctx))
     log.Printf("main exit")
 }
