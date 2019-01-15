@@ -78,7 +78,7 @@ func Stream2Msg(ctx *FlowCtx, cnn net.Conn) {
         }
     }
 }
-func Dial(ctx *FlowCtx, filter map[string]interface{}) {
+func Dial(ctx *FlowCtx, txM map[string]interface{}) {
     defer ctx.Wg.Done()
     for {
         d := net.Dialer{}
@@ -104,7 +104,7 @@ func Dial(ctx *FlowCtx, filter map[string]interface{}) {
             continue
         }
         //
-        // log.Printf("dialer got cnn=%v", cnn)
+        log.Printf("dialer got cnn=%v-%v", cnn.LocalAddr(), cnn.RemoteAddr())
         ctx.Wg.Add(1)
         cnnClosedCh := make(chan struct{})
         go func(ctx *FlowCtx, cnn net.Conn, closeCh chan struct{}) {
@@ -123,7 +123,7 @@ func Dial(ctx *FlowCtx, filter map[string]interface{}) {
         // if move Stream2Msg to sub routine
         //   we also need to know
         //   whether the cnn is broken or not when reading
-        tx, err := json.Marshal(filter)
+        tx, err := json.Marshal(txM)
         _, _ = cnn.Write(tx)
         Stream2Msg(ctx, cnn)
         // notify the sub routine exit
@@ -145,8 +145,11 @@ func main() {
         flag.Usage()
         return
     }
+    log.SetFlags(log.LstdFlags | log.Lshortfile)
     var cancel context.CancelFunc
     filter := make(map[string]interface{})
+    txM := make(map[string]interface{})
+    txM["filter"] = filter
     flowCtx := new(FlowCtx)
     flowCtx.ExitCh = make(chan struct{})
     flowCtx.Wg = new(sync.WaitGroup)
@@ -155,15 +158,16 @@ func main() {
     flowCtx.MsgCh = make(chan string, 1000*1000)
     flowCtx.SigCh = make(chan os.Signal, 1)
     flowCtx.WaitCtx, cancel = context.WithCancel(context.Background())
+    
     if *sdk_raddr != "" {
         sdk := make(map[string]interface{})
-        sdk["Raddr"] = *sdk_raddr
-        filter["Sdk"] = sdk
+        sdk["raddr"] = *sdk_raddr
+        filter["sdk"] = sdk
     }
     if *rs_raddr != "" {
         rs := make(map[string]interface{})
-        rs["Raddr"] = *rs_raddr
-        filter["Rs"] = rs
+        rs["raddr"] = *rs_raddr
+        filter["rs"] = rs
     }
 
     flowCtx.Wg.Add(1)
@@ -179,7 +183,7 @@ func main() {
     }(flowCtx)
 
     flowCtx.Wg.Add(1)
-    go Dial(flowCtx, filter)
+    go Dial(flowCtx, txM)
 
 loop:
     for {
