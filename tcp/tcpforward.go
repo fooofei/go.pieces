@@ -121,6 +121,9 @@ func app2tunn(appCnn io.ReadCloser, tunCnn io.WriteCloser, ctx *GlbContext, tunW
             }
             return
         }
+        if ctx.Exit {
+            return
+        }
     }
 }
 
