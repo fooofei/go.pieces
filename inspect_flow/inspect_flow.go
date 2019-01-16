@@ -140,6 +140,7 @@ func main() {
     raddr := flag.String("raddr", "", "sender addr of flow msg")
     sdk_raddr := flag.String("sdk_raddr", "", "filter sdk raddr")
     rs_raddr := flag.String("rs_raddr", "", "filter rs raddr")
+    beauty_jsn := flag.Bool("beauty_json", true, "use beauty json for msg")
     flag.Parse()
     if *raddr == "" {
         flag.Usage()
@@ -147,6 +148,7 @@ func main() {
     }
     log.SetFlags(log.LstdFlags | log.Lshortfile)
     var cancel context.CancelFunc
+    var err error
     filter := make(map[string]interface{})
     txM := make(map[string]interface{})
     txM["filter"] = filter
@@ -158,7 +160,7 @@ func main() {
     flowCtx.MsgCh = make(chan string, 1000*1000)
     flowCtx.SigCh = make(chan os.Signal, 1)
     flowCtx.WaitCtx, cancel = context.WithCancel(context.Background())
-    
+
     if *sdk_raddr != "" {
         sdk := make(map[string]interface{})
         sdk["raddr"] = *sdk_raddr
@@ -188,9 +190,17 @@ func main() {
 loop:
     for {
         select {
-        case err := <-flowCtx.ErrsCh:
+        case err = <-flowCtx.ErrsCh:
             log.Printf("got err =%v", err)
         case msg := <-flowCtx.MsgCh:
+            if *beauty_jsn {
+                bb := new(bytes.Buffer)
+                err = json.Indent(bb, []byte(msg), "", "\t")
+                if err == nil {
+                    msg = bb.String()
+                }
+            }
+
             fmt.Printf("[%v]--[%v]\n", flowCtx.MsgDeq, msg)
             atomic.AddUint32(&flowCtx.MsgDeq, 1)
         case <-flowCtx.ExitCh:
