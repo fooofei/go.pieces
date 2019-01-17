@@ -18,9 +18,13 @@ import (
     "time"
 )
 
+const (
+    DateTimeFmt = "2006/01/02 15:04:05"
+)
+
 type FlowCtx struct {
     Raddr   string
-    MsgCh   chan string
+    MsgCh   chan []byte
     ErrsCh  chan error
     Exit    bool
     ExitCh  chan struct{}
@@ -73,7 +77,7 @@ func Stream2Msg(ctx *FlowCtx, cnn net.Conn) {
 
         select {
         case <-ctx.ExitCh:
-        case ctx.MsgCh <- string(msg):
+        case ctx.MsgCh <- msg:
             atomic.AddUint32(&ctx.MsgEnq, 1)
         }
     }
@@ -135,6 +139,31 @@ func Dial(ctx *FlowCtx, txM map[string]interface{}) {
 
 }
 
+func UtcNow() string {
+    return time.Now().UTC().Format(DateTimeFmt)
+}
+func LocalNow() string {
+    return time.Now().Format(DateTimeFmt)
+}
+
+func BeautyJsonTime(j []byte) []byte {
+    m := make(map[string]interface{})
+    _ = json.Unmarshal(j, &m)
+
+    hitTime, ok := m["hitTime"].(float64)
+    if ok {
+        t := time.Unix(int64(hitTime), 0)
+        m["hitTimeUtc"] = t.UTC().Format(DateTimeFmt)
+        m["hitTimeLocal"] = t.Local().Format(DateTimeFmt)
+        r, err := json.Marshal(m)
+        if err == nil {
+            return r
+        }
+    }
+    // return origin
+    return j
+}
+
 func main() {
 
     raddr := flag.String("raddr", "", "sender addr of flow msg")
@@ -157,7 +186,7 @@ func main() {
     flowCtx.Wg = new(sync.WaitGroup)
     flowCtx.ErrsCh = make(chan error, 10)
     flowCtx.Raddr = *raddr
-    flowCtx.MsgCh = make(chan string, 1000*1000)
+    flowCtx.MsgCh = make(chan []byte, 1000*1000)
     flowCtx.SigCh = make(chan os.Signal, 1)
     flowCtx.WaitCtx, cancel = context.WithCancel(context.Background())
 
@@ -193,15 +222,16 @@ loop:
         case err = <-flowCtx.ErrsCh:
             log.Printf("got err =%v", err)
         case msg := <-flowCtx.MsgCh:
+            msg = BeautyJsonTime(msg)
             if *beauty_jsn {
                 bb := new(bytes.Buffer)
                 err = json.Indent(bb, []byte(msg), "", "\t")
                 if err == nil {
-                    msg = bb.String()
+                    msg = bb.Bytes()
                 }
             }
 
-            fmt.Printf("[%v]--[%v]\n", flowCtx.MsgDeq, msg)
+            fmt.Printf("[%v]--utc=%v local=%v %s\n", flowCtx.MsgDeq, UtcNow(), LocalNow(), msg)
             atomic.AddUint32(&flowCtx.MsgDeq, 1)
         case <-flowCtx.ExitCh:
             log.Printf("main thread got exit, break loop")
