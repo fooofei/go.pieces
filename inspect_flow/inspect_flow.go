@@ -40,7 +40,7 @@ type FlowCtx struct {
 // msg format is [uint16 + msgbytes]
 func Stream2Msg(ctx *FlowCtx, cnn net.Conn) {
     for {
-        msgHdr := make([]byte, 2)
+        msgHdr := make([]byte, 4)
         n, err := io.ReadFull(cnn, msgHdr)
         if err != nil {
             if err != io.EOF {
@@ -54,7 +54,7 @@ func Stream2Msg(ctx *FlowCtx, cnn net.Conn) {
         if n != len(msgHdr) {
             break
         }
-        var msgLen uint16
+        var msgLen uint32
         err = binary.Read(bytes.NewReader(msgHdr), binary.BigEndian, &msgLen)
         if err != nil {
             break
