@@ -7,7 +7,7 @@ import (
     "encoding/json"
     "flag"
     "fmt"
-    "golang.org/x/net/context"
+    "context"
     "log"
     "math"
     "net"
