@@ -4,75 +4,57 @@ import (
     "bytes"
     "crypto/tls"
     "encoding/binary"
-    "encoding/hex"
     "encoding/json"
     "flag"
     "fmt"
+    "golang.org/x/net/context"
     "log"
     "math"
     "net"
     "os"
+    "os/signal"
     "sync"
     "sync/atomic"
-    "time"
-    "os/signal"
     "syscall"
+    "time"
 )
 
 // globals
-var raddr string
-var routines int
-var interval int
+type MyContext struct {
+    StatDur     time.Duration
+    RoutinesCnt int
+    Raddr       string
 
-type Context struct {
-    // cnns
-    tcpCnt uint64
-    tcpCntOk uint64
-    tcpCntFail uint64
-    hitErrs chan string
-    //
-    rtnCnt int32
-    rtnStopCnt int32
-    sigCh chan os.Signal
-    rtnStop bool
-    //
-    wg sync.WaitGroup
-    tlsConf tls.Config
-    pid int
+    TcpCnt     uint64
+    TcpCntOk   uint64
+    TcpCntFail uint64
+    HitErrs    chan error
+
+    AddRtnCnt int32
+    SubRtnCnt int32
+    WaitCtx   context.Context
+    TlsConf   *tls.Config
+    Wg        *sync.WaitGroup
 }
 
-func copyContext(src * Context, dst * Context){
-    dst.tcpCnt = src.tcpCnt
-    dst.tcpCntOk = src.tcpCntOk
-    dst.tcpCntFail = src.tcpCntFail
+func copyContext(src *MyContext, dst *MyContext) {
+    dst.TcpCnt = src.TcpCnt
+    dst.TcpCntOk = src.TcpCntOk
+    dst.TcpCntFail = src.TcpCntFail
     //
-    dst.rtnCnt = src.rtnCnt
-    dst.rtnStop = src.rtnStop
-    dst.rtnStopCnt = src.rtnStopCnt
+    dst.AddRtnCnt = src.AddRtnCnt
+    dst.SubRtnCnt = src.SubRtnCnt
 }
-func subContext(a * Context, b * Context, c * Context){
-    c.tcpCnt = a.tcpCnt - b.tcpCnt
-    c.tcpCntOk = a.tcpCntOk - b.tcpCntOk
-    c.tcpCntFail = a.tcpCntFail - b.tcpCntFail
+func subContext(a *MyContext, b *MyContext, c *MyContext) {
+    c.TcpCnt = a.TcpCnt - b.TcpCnt
+    c.TcpCntOk = a.TcpCntOk - b.TcpCntOk
+    c.TcpCntFail = a.TcpCntFail - b.TcpCntFail
     //
-    c.rtnCnt = a.rtnCnt - b.rtnCnt
-    //c.rtnStop = a.rtnStop - b.rtnStop
-    c.rtnStopCnt = a.rtnStopCnt - b.rtnStopCnt
+    c.AddRtnCnt = a.AddRtnCnt - b.AddRtnCnt
+    c.SubRtnCnt = a.SubRtnCnt - b.SubRtnCnt
 }
 
-func tlsHexView( v interface{}) string {
-    var binBuf bytes.Buffer
-    err := binary.Write(&binBuf, binary.LittleEndian, v)
-    if err != nil{
-        panic(err)
-    }
-
-
-    //return hex.EncodeToString(binBuf.Bytes())
-    return hex.Dump(binBuf.Bytes())
-}
-
-func DeepCopy(src interface {}, dst interface{}) error {
+func DeepCopy(src interface{}, dst interface{}) error {
     if dst == nil {
         return fmt.Errorf("dst cannot be nil")
     }
@@ -90,10 +72,10 @@ func DeepCopy(src interface {}, dst interface{}) error {
     return nil
 }
 
-func toLEBytes(v interface {})  []byte {
+func toLEBytes(v interface{}) []byte {
     var binBuf bytes.Buffer
     err := binary.Write(&binBuf, binary.LittleEndian, v)
-    if err != nil{
+    if err != nil {
         panic(err)
     }
     return binBuf.Bytes()
@@ -102,144 +84,172 @@ func toLEBytes(v interface {})  []byte {
 func toBEBytes(v interface{}) []byte {
     var binBuf bytes.Buffer
     err := binary.Write(&binBuf, binary.BigEndian, v)
-    if err != nil{
+    if err != nil {
         panic(err)
     }
     return binBuf.Bytes()
 }
 
-
-func init(){
-    flag.IntVar(&routines, "routines", 1, "go routines cnt")
-    flag.StringVar(&raddr, "raddr", "127.0.0.1:886", "tcp-ssl raddr")
-    flag.IntVar(&interval, "interval", 3, "stat interval")
-}
-
-func cnnRoutine(ctx * Context){
-    defer ctx.wg.Done()
+func cnnRoutine(ctx *MyContext) {
+    defer ctx.Wg.Done()
 
     tmo := time.Duration(time.Second * 3)
-    atomic.AddInt32(&ctx.rtnCnt, 1)
-    defer atomic.AddInt32(&ctx.rtnStopCnt, 1)
-
-    for !ctx.rtnStop {
+    atomic.AddInt32(&ctx.AddRtnCnt, 1)
+    defer atomic.AddInt32(&ctx.SubRtnCnt, 1)
+loop:
+    for {
         // only tcp connect
         d := &net.Dialer{Timeout: tmo}
-        conn, err := tls.DialWithDialer(d, "tcp", raddr, &ctx.tlsConf)
-        atomic.AddUint64(&ctx.tcpCnt, 1)
 
+        atomic.AddUint64(&ctx.TcpCnt, 1)
+        tcpCnn, err := d.DialContext(ctx.WaitCtx, "tcp", ctx.Raddr)
+        ok := false
         if err != nil {
-            atomic.AddUint64(&ctx.tcpCntFail, 1)
             select {
-            case ctx.hitErrs <- fmt.Sprintf("%v", err) :
+            case ctx.HitErrs <- err:
+            default:
+            }
+        } else {
+            cnnClosecCh := make(chan struct{}, 1)
+            ctx.Wg.Add(1)
+            go func() {
+                select {
+                case <-ctx.WaitCtx.Done():
+                    _ = tcpCnn.Close()
+                case <-cnnClosecCh:
+                }
+                ctx.Wg.Done()
+            }()
+
+            tlsCnn := tls.Client(tcpCnn, ctx.TlsConf)
+            err = tlsCnn.Handshake()
+
+            if err != nil {
+                select {
+                case ctx.HitErrs <- err:
+                default:
+                }
+            } else {
+                ok = true
+            }
+
+            close(cnnClosecCh)
+        }
+
+        if !ok {
+            atomic.AddUint64(&ctx.TcpCntFail, 1)
+        } else {
+            atomic.AddUint64(&ctx.TcpCntOk, 1)
+        }
+
+        select {
+        case <-ctx.WaitCtx.Done():
+            break loop
+        default:
+        }
+    }
+}
+
+func statRoutine(ctx *MyContext) {
+
+    var hitCtx MyContext
+    var nowCtx MyContext
+    var itvCtx MyContext
+    var hitTime time.Time
+    var nowTime time.Time
+    var elapse uint64
+    var err error
+
+    statTick := time.NewTicker(ctx.StatDur)
+    cnt := 0
+    hitTime = time.Now()
+loop:
+    for {
+        select {
+        case <-ctx.WaitCtx.Done():
+            break loop
+        case <-statTick.C:
+            nowTime = time.Now()
+            var buf bytes.Buffer
+            copyContext(ctx, &nowCtx)
+            // sub value
+            log.Printf("hit stat cnt= %v raddr= %v", cnt, ctx.Raddr)
+            subContext(&nowCtx, &hitCtx, &itvCtx)
+            elapse = uint64(math.Max(float64(1), float64(nowTime.Sub(hitTime).Seconds())))
+            // calc value
+            buf.WriteString(fmt.Sprintf("  tcpCnt %v-%v/%v=%.3f\n",
+                nowCtx.TcpCnt, hitCtx.TcpCnt, elapse, float64(nowCtx.TcpCnt-hitCtx.TcpCnt)/float64(elapse)))
+            buf.WriteString(fmt.Sprintf("  tcpCntOk %v-%v/%v=%.3f\n",
+                nowCtx.TcpCntOk, hitCtx.TcpCntOk, elapse, float64(nowCtx.TcpCntOk-hitCtx.TcpCntOk)/float64(elapse)))
+            buf.WriteString(fmt.Sprintf("  tcpCntFail %v-%v/%v=%.3f\n",
+                nowCtx.TcpCntFail, hitCtx.TcpCntFail, elapse, float64(nowCtx.TcpCntFail-hitCtx.TcpCntFail)/float64(elapse)))
+            fmt.Printf("%v", buf.String())
+            //
+            copyContext(&nowCtx, &hitCtx)
+            hitTime = nowTime
+            cnt += 1
+
+            select {
+            case err = <-ctx.HitErrs:
+                log.Printf("hit err= %v", err)
             default:
             }
         }
 
-        if conn != nil{
-            // write other bytes
-            //_, _ = conn.Write(authBytes)
-            //
-            _ = conn.CloseWrite()
-            _ = conn.Close()
-            atomic.AddUint64(&ctx.tcpCntOk, 1)
-        }
     }
 
 }
 
-func statRoutine(ctx * Context) {
+func SetupSignal(ctx *MyContext, cancel context.CancelFunc) {
 
-    var hitCtx Context
-    var nowCtx Context
-    var itvCtx Context
-    var hitTime time.Time
-    var nowTime time.Time
-    var elapse uint64
-
-
-    itv := interval
-    cnt := 0
-    hitTime = time.Now()
-    defer ctx.wg.Done()
-
-    for !ctx.rtnStop {
-        var buf bytes.Buffer
-        // get value
-        time.Sleep(time.Second * time.Duration(itv))
-        nowTime = time.Now()
-        copyContext(ctx, &nowCtx)
-        // sub value
-        log.Printf("hit stat cnt= %v pid= %v raddr= %v", cnt, ctx.pid, raddr)
-        subContext(&nowCtx, &hitCtx, &itvCtx)
-        elapse = uint64(math.Max(float64(1), float64(nowTime.Sub(hitTime).Seconds())))
-        // calc value
-        buf.WriteString(fmt.Sprintf("  tcpCnt %v-%v/%v=%.3f\n",
-            nowCtx.tcpCnt, hitCtx.tcpCnt, elapse, float64(nowCtx.tcpCnt-hitCtx.tcpCnt)/float64(elapse)) )
-        buf.WriteString(fmt.Sprintf("  tcpCntOk %v-%v/%v=%.3f\n",
-            nowCtx.tcpCntOk, hitCtx.tcpCntOk, elapse, float64(nowCtx.tcpCntOk-hitCtx.tcpCntOk)/float64(elapse)) )
-        buf.WriteString(fmt.Sprintf("  tcpCntFail %v-%v/%v=%.3f\n",
-            nowCtx.tcpCntFail, hitCtx.tcpCntFail, elapse, float64(nowCtx.tcpCntFail-hitCtx.tcpCntFail)/float64(elapse)) )
-        buf.WriteString(fmt.Sprintf("  rtnCnt %v-%v/%v=%.3f\n",
-            nowCtx.rtnCnt, hitCtx.rtnCnt, elapse, float64(nowCtx.rtnCnt-hitCtx.rtnCnt)/float64(elapse)) )
-        buf.WriteString(fmt.Sprintf("  rtnStopCnt %v-%v/%v=%.3f\n",
-            nowCtx.rtnStopCnt, hitCtx.rtnStopCnt, elapse, float64(nowCtx.rtnStopCnt-hitCtx.rtnStopCnt)/float64(elapse)) )
-        buf.WriteString(fmt.Sprintf("  rtnStop=%v\n", ctx.rtnStop))
+    sigCh := make(chan os.Signal, 2)
+    signal.Notify(sigCh, os.Interrupt)
+    signal.Notify(sigCh, syscall.SIGTERM)
+    ctx.Wg.Add(1)
+    go func() {
         select {
-        case err,ok := <- ctx.hitErrs:
-            if ok {
-                buf.WriteString(fmt.Sprintf("  err= %v\n", err))
-            }
-        default:
+        case <-sigCh:
+            cancel()
+        case <-ctx.WaitCtx.Done():
         }
-        fmt.Printf("%v", buf.String())
-        //
-        copyContext(&nowCtx, &hitCtx)
-        hitTime = nowTime
-        cnt += 1
-    }
-
-
+        ctx.Wg.Done()
+    }()
 }
 
+func main() {
 
-func main(){
-
+    //
+    ctx := new(MyContext)
+    flag.IntVar(&ctx.RoutinesCnt, "routines", 1, "go routines cnt")
+    flag.StringVar(&ctx.Raddr, "raddr", "127.0.0.1:886", "tcp-ssl raddr")
+    dur := flag.Int("interval", 3, "stat interval")
     flag.Parse()
+    ctx.StatDur = time.Second * time.Duration(*dur)
     //
-    log.Printf("use routines=%v to raddr= %v\n" ,routines, raddr)
+    log.SetPrefix(fmt.Sprintf("pid= %v ", os.Getpid()))
+    log.SetFlags(log.LstdFlags | log.Lshortfile)
     //
+    log.Printf("use routines=%v to raddr= %v\n", ctx.RoutinesCnt, ctx.Raddr)
+    //
+    var cancel context.CancelFunc
+    ctx.HitErrs = make(chan error, 3)
+    ctx.TlsConf = new(tls.Config)
+    ctx.TlsConf.InsecureSkipVerify = true
+    ctx.WaitCtx, cancel = context.WithCancel(context.Background())
+    ctx.Wg = new(sync.WaitGroup)
 
-    ctx := Context{}
-    ctx.hitErrs = make(chan string, 3)
-    ctx.tlsConf = tls.Config{InsecureSkipVerify:true}
-    ctx.sigCh = make(chan os.Signal, 1)
-    signal.Notify(ctx.sigCh, os.Interrupt)
-    signal.Notify(ctx.sigCh, syscall.SIGTERM)
-    ctx.pid = os.Getpid()
-    log.Printf("start routines")
+    SetupSignal(ctx, cancel)
 
-    for i :=0; i< routines; i+= 1 {
-        ctx.wg.Add(1)
-        go cnnRoutine(&ctx)
+    for i := 0; i < ctx.RoutinesCnt; i += 1 {
+        ctx.Wg.Add(1)
+        go cnnRoutine(ctx)
     }
 
     log.Printf("all routines started, go stat")
 
-    ctx.wg.Add(1)
-    go func(ctx * Context){
-        defer ctx.wg.Done()
-        //
-        <- ctx.sigCh
-        ctx.rtnStop=true
-        log.Printf("[!] stop all")
-    }(&ctx)
-    ctx.wg.Add(1)
-    statRoutine(&ctx)
-    
-    
+    statRoutine(ctx)
     // wait close
     log.Printf("wait all routines to exit")
-    ctx.wg.Wait()
+    ctx.Wg.Wait()
     log.Printf("exit\n")
 }
