@@ -7,6 +7,7 @@ from socket import AF_INET
 from socket import SOCK_STREAM
 from socket import ntohs
 from socket import htons
+from socket import htonl
 from socket import socket
 from socket import SOL_SOCKET
 from socket import SO_REUSEADDR
@@ -33,8 +34,8 @@ def main():
                     data = f.recv(128*1024)
                     print(data)
                     msg = 'helloworldssssssss'
-                    ctnt = htons(len(msg))
-                    ctnt = st_pack('H',ctnt)
+                    ctnt = htonl(len(msg))
+                    ctnt = st_pack('I',ctnt)
                     ctnt += msg
                     print('tx len={}'.format(len(ctnt)))
                     f.send(ctnt)

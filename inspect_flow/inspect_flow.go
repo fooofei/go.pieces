@@ -26,9 +26,6 @@ type FlowCtx struct {
     Raddr   string
     MsgCh   chan []byte
     ErrsCh  chan error
-    Exit    bool
-    ExitCh  chan struct{}
-    SigCh   chan os.Signal
     WaitCtx context.Context
     Wg      *sync.WaitGroup
     MsgEnq  uint32
@@ -74,9 +71,8 @@ func Stream2Msg(ctx *FlowCtx, cnn net.Conn) {
         if n != len(msg) {
             break
         }
-
         select {
-        case <-ctx.ExitCh:
+        case <-ctx.WaitCtx.Done():
         case ctx.MsgCh <- msg:
             atomic.AddUint32(&ctx.MsgEnq, 1)
         }
@@ -84,6 +80,7 @@ func Stream2Msg(ctx *FlowCtx, cnn net.Conn) {
 }
 func Dial(ctx *FlowCtx, txM map[string]interface{}) {
     defer ctx.Wg.Done()
+loop:
     for {
         d := net.Dialer{}
         cnn, err := d.DialContext(ctx.WaitCtx, "tcp", ctx.Raddr)
@@ -95,15 +92,16 @@ func Dial(ctx *FlowCtx, txM map[string]interface{}) {
             }
         }
         // this is what we exit
-        if ctx.Exit {
-            log.Printf("dial got exit")
-            break
+        select {
+        case <-ctx.WaitCtx.Done():
+            break loop
+        default:
         }
         if cnn == nil {
             // wait for a moment to redial
             select {
             case <-time.After(time.Second * 3):
-            case <-ctx.ExitCh:
+            case <-ctx.WaitCtx.Done():
             }
             continue
         }
@@ -115,7 +113,7 @@ func Dial(ctx *FlowCtx, txM map[string]interface{}) {
             // when program exit, we need close cnn
             // when cnn close, we need know
             select {
-            case <-ctx.ExitCh:
+            case <-ctx.WaitCtx.Done():
             case <-closeCh:
             }
             ctx.Wg.Done()
@@ -132,8 +130,12 @@ func Dial(ctx *FlowCtx, txM map[string]interface{}) {
         Stream2Msg(ctx, cnn)
         // notify the sub routine exit
         close(cnnClosedCh)
-        if ctx.Exit {
-            break
+
+        // this is what we exit
+        select {
+        case <-ctx.WaitCtx.Done():
+            break loop
+        default:
         }
     }
 
@@ -164,6 +166,24 @@ func BeautyJsonTime(j []byte) []byte {
     return j
 }
 
+func SetupSignal(ctx *FlowCtx, cancel context.CancelFunc) {
+
+    sigCh := make(chan os.Signal, 2)
+
+    signal.Notify(sigCh, os.Interrupt)
+    signal.Notify(sigCh, syscall.SIGTERM)
+
+    ctx.Wg.Add(1)
+    go func() {
+        select {
+        case <-sigCh:
+            cancel()
+        case <-ctx.WaitCtx.Done():
+        }
+        ctx.Wg.Done()
+    }()
+}
+
 func main() {
 
     raddr := flag.String("raddr", "", "sender addr of flow msg")
@@ -176,18 +196,17 @@ func main() {
         return
     }
     log.SetFlags(log.LstdFlags | log.Lshortfile)
+    log.SetPrefix(fmt.Sprintf("pid= %v ", os.Getpid()))
     var cancel context.CancelFunc
     var err error
     filter := make(map[string]interface{})
     txM := make(map[string]interface{})
     txM["filter"] = filter
     flowCtx := new(FlowCtx)
-    flowCtx.ExitCh = make(chan struct{})
     flowCtx.Wg = new(sync.WaitGroup)
     flowCtx.ErrsCh = make(chan error, 10)
     flowCtx.Raddr = *raddr
     flowCtx.MsgCh = make(chan []byte, 1000*1000)
-    flowCtx.SigCh = make(chan os.Signal, 1)
     flowCtx.WaitCtx, cancel = context.WithCancel(context.Background())
 
     if *sdk_raddr != "" {
@@ -201,18 +220,7 @@ func main() {
         filter["rs"] = rs
     }
 
-    flowCtx.Wg.Add(1)
-    signal.Notify(flowCtx.SigCh, os.Interrupt)
-    signal.Notify(flowCtx.SigCh, syscall.SIGTERM)
-    go func(ctx *FlowCtx) {
-        // only need to wait signal
-        // we run forever
-        <-ctx.SigCh
-        ctx.Exit = true
-        close(ctx.ExitCh)
-        flowCtx.Wg.Done()
-    }(flowCtx)
-
+    SetupSignal(flowCtx, cancel)
     flowCtx.Wg.Add(1)
     go Dial(flowCtx, txM)
 
@@ -233,7 +241,7 @@ loop:
 
             fmt.Printf("[%v]--utc=%v local=%v %s\n", flowCtx.MsgDeq, UtcNow(), LocalNow(), msg)
             atomic.AddUint32(&flowCtx.MsgDeq, 1)
-        case <-flowCtx.ExitCh:
+        case <-flowCtx.WaitCtx.Done():
             log.Printf("main thread got exit, break loop")
             cancel()
             break loop
