@@ -30,7 +30,6 @@ type LsnCtx struct {
     LsnAddr      string
     AddTunnelCnt uint32
     SubTunnelCnt uint32
-    GrpAddr      string
 }
 
 type GlbContext struct {
@@ -38,8 +37,6 @@ type GlbContext struct {
     AddTunnelCnt uint32
     SubTunnelCnt uint32
     HitErrs      chan error
-    ExitCh       chan struct{}
-    Exit         bool
     Wg           sync.WaitGroup
     WaitCtx      context.Context
     Lsns         []LsnCtx
@@ -54,33 +51,41 @@ func listenRoutine(ctx *GlbContext, lsnCtx *LsnCtx) {
         panic(err)
     }
     log.Printf("listener[%v] working", tcpLsn.Addr())
-    ctx.Wg.Add(1)
-    go func(ctx *GlbContext, lsnCtx *LsnCtx, tcpLsn net.Listener) {
-        defer ctx.Wg.Done()
-        //
-        for {
-            appCnn, err := tcpLsn.Accept()
-            if err != nil {
-                select {
-                case ctx.HitErrs <- err:
-                default:
-                }
-            }
-            if ctx.Exit {
-                return
-            }
-            log.Printf("accept %v-%v", appCnn.LocalAddr(), appCnn.RemoteAddr())
-            ctx.Wg.Add(1)
-            go tunnelRoutine(ctx, lsnCtx, appCnn)
-        }
-    }(ctx, lsnCtx, tcpLsn)
 
-    // only program exit will stop listen
-    select {
-    case <-ctx.ExitCh:
-        // wakeup the block of accept()
-        _ = tcpLsn.Close()
+    ctx.Wg.Add(1)
+    cnnClosedCh := make(chan bool)
+    defer close(cnnClosedCh)
+    go func() {
+        // only program exit will stop listen
+        select {
+        case <-ctx.WaitCtx.Done():
+            // wakeup the block of accept()
+            _ = tcpLsn.Close()
+        case <-cnnClosedCh:
+        }
+        ctx.Wg.Done()
+    }()
+
+loop:
+    for {
+        appCnn, err := tcpLsn.Accept()
+        if err != nil {
+            select {
+            case ctx.HitErrs <- err:
+            default:
+            }
+        }
+        select {
+        case <-ctx.WaitCtx.Done():
+            break loop
+        default:
+        }
+
+        log.Printf("accept %v-%v", appCnn.LocalAddr(), appCnn.RemoteAddr())
+        ctx.Wg.Add(1)
+        go tunnelRoutine(ctx, lsnCtx, appCnn)
     }
+
 }
 
 // TCP 是双工，单方向通道坏掉，另一个方向的还可能会好
@@ -102,10 +107,12 @@ func app2tunn(appCnn io.ReadCloser, tunCnn io.WriteCloser, ctx *GlbContext, tunW
             }
             return
         }
-        if ctx.Exit {
-            // stop program
+        select {
+        case <-ctx.WaitCtx.Done():
             return
+        default:
         }
+
         if n <= 0 {
             continue
         }
@@ -121,8 +128,10 @@ func app2tunn(appCnn io.ReadCloser, tunCnn io.WriteCloser, ctx *GlbContext, tunW
             }
             return
         }
-        if ctx.Exit {
+        select {
+        case <-ctx.WaitCtx.Done():
             return
+        default:
         }
     }
 }
@@ -155,8 +164,10 @@ func tunnelRoutine(ctx *GlbContext, lsnCtx *LsnCtx, appConn net.Conn) {
         }
         return
     }
-    if ctx.Exit {
+    select {
+    case <-ctx.WaitCtx.Done():
         return
+    default:
     }
     defer func() {
         _ = tunConn.Close()
@@ -182,7 +193,7 @@ func tunnelRoutine(ctx *GlbContext, lsnCtx *LsnCtx, appConn net.Conn) {
     }()
 
     select {
-    case <-ctx.ExitCh:
+    case <-ctx.WaitCtx.Done():
         _ = tunConn.Close()
         _ = appConn.Close()
         log.Printf("tunnel routine rcv stopCh")
@@ -194,30 +205,34 @@ func tunnelRoutine(ctx *GlbContext, lsnCtx *LsnCtx, appConn net.Conn) {
     log.Printf("tunnel routine exit")
 }
 
+func SetupSignal(ctx *GlbContext, cancel context.CancelFunc) {
+
+    sigCh := make(chan os.Signal, 2)
+    signal.Notify(sigCh, os.Interrupt)
+    signal.Notify(sigCh, syscall.SIGTERM)
+    ctx.Wg.Add(1)
+    go func() {
+        select {
+        case <-sigCh:
+            cancel()
+        case <-ctx.WaitCtx.Done():
+        }
+        ctx.Wg.Done()
+    }()
+}
+
 func main() {
     var cancel context.CancelFunc
     ctx := new(GlbContext)
     ctx.Raddr = "127.0.0.1:8869"
     // can be more, custom
     ctx.HitErrs = make(chan error, 4)
-    ctx.ExitCh = make(chan struct{})
     ctx.Lsns = make([]LsnCtx, 1)
     ctx.WaitCtx, cancel = context.WithCancel(context.Background())
 
     ctx.Lsns[0].LsnAddr = "127.0.0.1:8879"
 
-    // setup signal
-    sigCh := make(chan os.Signal, 1)
-    signal.Notify(sigCh, os.Interrupt)
-    signal.Notify(sigCh, syscall.SIGTERM)
-    ctx.Wg.Add(1)
-    go func() {
-        v := <-sigCh
-        log.Printf("rcv signal %v, goto close", v)
-        ctx.Exit = true
-        close(ctx.ExitCh)
-        ctx.Wg.Done()
-    }()
+    SetupSignal(ctx, cancel)
 
     for i := 0; i < len(ctx.Lsns); i += 1 {
         ctx.Wg.Add(1)
@@ -225,15 +240,15 @@ func main() {
     }
 
     // stat
+    statTick := time.NewTicker(time.Second * 3)
 loop:
     for {
         select {
-        case <-ctx.ExitCh:
-            cancel()
+        case <-ctx.WaitCtx.Done():
             break loop
         case err := <-ctx.HitErrs:
             log.Printf("err= %v", err)
-        case <-time.After(time.Second * 3):
+        case <-statTick.C:
             log.Printf("tun cnt (add= %v sub= %v)", ctx.AddTunnelCnt, ctx.SubTunnelCnt)
         }
     }
