@@ -189,7 +189,7 @@ func main() {
         {Uri: "https://ifconfig.co/ip", IpGetter: GetIpInPlainText},
     }
     log.SetFlags(log.LstdFlags | log.Lshortfile)
-    log.Printf("pid= %v", os.Getpid())
+    log.SetPrefix(fmt.Sprintf("pid= %v ",os.Getpid()))
     ctx := new(ParallelHttpCtx)
     ctx.Results = list.New()
     ctx.ResultCh = make(chan *WorkItem, len(pubSrvs))
