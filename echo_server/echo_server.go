@@ -1,8 +1,10 @@
 package main
 
 import (
+    "context"
     "flag"
-    "golang.org/x/net/context"
+    "fmt"
+    "io"
     "log"
     "net"
     "os"
@@ -17,6 +19,7 @@ type EchoContext struct {
     Laddr   string
     WaitCtx context.Context
     Wg      *sync.WaitGroup
+    StatDur time.Duration
     AddCnn  uint32
     SubCnn  uint32
 }
@@ -42,14 +45,7 @@ func SetupSignal(ctx *EchoContext, cancel context.CancelFunc) {
 func EchoConn(ctx *EchoContext, cnn net.Conn) {
 
     atomic.AddUint32(&ctx.AddCnn, 1)
-    defer atomic.AddUint32(&ctx.SubCnn, 1)
-
-    defer ctx.Wg.Done()
-    defer func() {
-        _ = cnn.Close()
-    }()
-
-    cnnClosedCh := make(chan struct{}, 1)
+    cnnClosedCh := make(chan bool, 1)
     ctx.Wg.Add(1)
     go func() {
         select {
@@ -60,22 +56,12 @@ func EchoConn(ctx *EchoContext, cnn net.Conn) {
         ctx.Wg.Done()
     }()
 
-    buf := make([]byte, 128*1024)
-loop:
-    for {
-        n, err := cnn.Read(buf)
-        if err != nil {
-            break loop
-        }
-
-        // log.Printf("rx %s", buf[:n])
-        _, err = cnn.Write(buf[:n])
-        if err != nil {
-            break loop
-        }
-    }
-
+    // copy until EOF
+    _, _ = io.Copy(cnn, cnn)
     close(cnnClosedCh)
+    _ = cnn.Close()
+    ctx.Wg.Done()
+    atomic.AddUint32(&ctx.SubCnn, 1)
 }
 
 func BrkOpenFilesLimit() {
@@ -95,38 +81,36 @@ func BrkOpenFilesLimit() {
 }
 
 func main() {
-
+    // log
     log.SetFlags(log.LstdFlags | log.Lshortfile)
+    log.SetPrefix(fmt.Sprintf("pid= %v ", os.Getpid()))
 
-    laddr := flag.String("laddr", "", "The local listen addr")
+    ctx := new(EchoContext)
+    flag.StringVar(&ctx.Laddr, "laddr", "", "The local listen addr")
     flag.Parse()
-    if *laddr == "" {
+    if ctx.Laddr == "" {
         flag.PrintDefaults()
         return
     }
 
     var cancel context.CancelFunc
     var err error
-    pid := os.Getpid()
-    ctx := new(EchoContext)
-    ctx.Laddr = *laddr
+
     ctx.WaitCtx, cancel = context.WithCancel(context.Background())
     ctx.Wg = new(sync.WaitGroup)
+    ctx.StatDur = time.Second * 5
 
     BrkOpenFilesLimit()
     cnn, err := net.Listen("tcp", ctx.Laddr)
     if err != nil {
         log.Fatal(err)
     }
-    defer func() {
-        _ = cnn.Close()
-    }()
 
     log.Printf("working on \"%v\"", ctx.Laddr)
 
     SetupSignal(ctx, cancel)
     // a routine to wake up accept()
-    cnnClosedCh := make(chan struct{}, 1)
+    cnnClosedCh := make(chan bool, 1)
     ctx.Wg.Add(1)
     go func() {
         select {
@@ -139,19 +123,20 @@ func main() {
 
     // stat
     ctx.Wg.Add(1)
-    go func() {
-        defer ctx.Wg.Done()
-        tick := time.NewTicker(time.Second * 5)
+    go func(ctx *EchoContext) {
+        tick := time.NewTicker(ctx.StatDur)
+    loop1:
         for {
             select {
             case <-ctx.WaitCtx.Done():
-                return
+                break loop1
             case <-tick.C:
-                log.Printf("pid= %v stat AddCnn= %v SubCnn= %v Add-Sub= %v",
-                    pid, ctx.AddCnn, ctx.SubCnn, ctx.AddCnn-ctx.SubCnn)
+                log.Printf("stat AddCnn= %v SubCnn= %v Add-Sub= %v",
+                    ctx.AddCnn, ctx.SubCnn, ctx.AddCnn-ctx.SubCnn)
             }
         }
-    }()
+        ctx.Wg.Done()
+    }(ctx)
 
 loop:
     for {
@@ -164,7 +149,7 @@ loop:
         go EchoConn(ctx, cltCnn)
 
     }
-
+    _ = cnn.Close()
     close(cnnClosedCh)
     ctx.Wg.Wait()
     log.Printf("main exit")
