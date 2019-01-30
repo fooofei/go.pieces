@@ -4,7 +4,7 @@ import (
     "context"
     "flag"
     "fmt"
-    "io"
+    "github.com/fooofei/go_pieces/echo_server/rlimit"
     "log"
     "net"
     "os"
@@ -56,28 +56,80 @@ func EchoConn(ctx *EchoContext, cnn net.Conn) {
         ctx.Wg.Done()
     }()
 
-    // copy until EOF
-    _, _ = io.Copy(cnn, cnn)
+    //copy until EOF
+    //_, _ = io.Copy(cnn, cnn)
+    //
+    //ctx.Wg.Add(1)
+    //go func() {
+    //  select {
+    //  case <-ctx.WaitCtx.Done():
+    //  case <-time.After(time.Second * 8):
+    //      tcp, _ := cnn.(*net.TCPConn)
+    //      _ = tcp.CloseWrite()
+    //      log.Printf("close write")
+    //  }
+    //  ctx.Wg.Done()
+    //}()
+
+    // read and write must move to routine
+    // each other not influence other
+    subWg := new(sync.WaitGroup)
+    ctx.Wg.Add(1)
+    subWg.Add(1)
+    go func() {
+        // write
+        cnt := 0
+    wloop:
+        for {
+            c := fmt.Sprintf("from server %v", cnt)
+            n, err := cnn.Write([]byte(c))
+            cnt ++
+            if err != nil {
+                log.Printf("Write err= %v break", err)
+                break wloop
+            }
+            log.Printf("Write = %v", n)
+
+            select {
+            case <-time.After(time.Second):
+            case <-ctx.WaitCtx.Done():
+            }
+        }
+
+        ctx.Wg.Done()
+        subWg.Done()
+    }()
+
+    ctx.Wg.Add(1)
+    subWg.Add(1)
+    go func() {
+
+        buf := make([]byte, 128*1024)
+    rloop:
+        for {
+
+            n, err := cnn.Read(buf)
+            if err != nil {
+                log.Printf("Read err= %v break", err)
+                break rloop
+            }
+            log.Printf("Read = %s", buf[:n])
+
+            select {
+            case <-time.After(time.Second):
+            case <-ctx.WaitCtx.Done():
+            }
+
+        }
+
+        ctx.Wg.Done()
+        subWg.Done()
+    }()
+    subWg.Wait()
     close(cnnClosedCh)
     _ = cnn.Close()
     ctx.Wg.Done()
     atomic.AddUint32(&ctx.SubCnn, 1)
-}
-
-func BrkOpenFilesLimit() {
-    var err error
-    var rlim syscall.Rlimit
-    var limit uint64 = 1000 * 1000
-    err = syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlim)
-    if err != nil {
-        log.Fatalf("Getrlimit err= %v", err)
-    }
-    rlim.Cur = limit + uint64(100)
-    rlim.Max = limit + uint64(100)
-    err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rlim)
-    if err != nil {
-        log.Fatalf("Setrlimit err= %v", err)
-    }
 }
 
 func main() {
@@ -100,7 +152,7 @@ func main() {
     ctx.Wg = new(sync.WaitGroup)
     ctx.StatDur = time.Second * 5
 
-    BrkOpenFilesLimit()
+    rlimt.BrkOpenFilesLimit()
     cnn, err := net.Listen("tcp", ctx.Laddr)
     if err != nil {
         log.Fatal(err)
