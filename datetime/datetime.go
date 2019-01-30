@@ -41,11 +41,14 @@ func timestampNextDayOff() {
 }
 
 func timestampTruncate() {
-    dur := time.Second * 60
-    now := time.Now().UTC()
-    log.Printf("now= %v", now.Format(DateTimeFmt))
-    tr := now.Truncate(dur)
-    log.Printf("now.Truncate= %v", tr.Format(DateTimeFmt))
+    //dur := time.Second * 60
+    dur := time.Hour * 24
+    utcNow := time.Now().UTC()
+    log.Printf("utcNow= %v unix= %v unixNano= %v", utcNow.Format(DateTimeFmt), utcNow.Unix(),
+        utcNow.UnixNano())
+
+    tr := utcNow.Truncate(dur)
+    log.Printf("utcNow.Truncate= %v unix= %v", tr.Format(DateTimeFmt), tr.Unix())
 
     trUnix := tr.UnixNano()
     b := time.Unix(0, trUnix)
@@ -59,18 +62,39 @@ func timestampTruncate() {
 }
 
 func timestampRound() {
-    now := time.Now().UTC()
-    dur := time.Second * 60
-    rou := now.Round(dur)
+    utcNow := time.Now().UTC()
+    dur := time.Hour * 24
+    rou := utcNow.Round(dur)
 
-    log.Printf("now= %v", now.Format(DateTimeFmt))
-    log.Printf("now.Round= %v", rou.Format(DateTimeFmt))
+    log.Printf("utcNow= %v unix= %v", utcNow.Format(DateTimeFmt), utcNow.Unix())
+    log.Printf("utcNow.Round= %v unix= %v", rou.Format(DateTimeFmt), rou.Unix())
     // output:
     //2019/01/21 12:16:58 datetime.go:54: now= 2019/01/21 04:16:58
     //2019/01/21 12:16:58 datetime.go:55: now.Round= 2019/01/21 04:17:00
 }
 
+func timestampWhy(){
+    unixNano := int64(1548639286891265000)
+    b := time.Unix(0,unixNano)
+    b.In(time.UTC)
+
+    log.Printf("b= %v unix= %v unixNano= %v", b.Format(DateTimeFmt), b.Unix(), b.UnixNano())
+    dur := time.Hour * 24
+    tr := b.Truncate(dur)
+    tou := b.Round(dur) // 这个是四舍五入，不是全部是进位
+
+    log.Printf("tr= %v unix= %v", tr.Format(DateTimeFmt), tr.Unix())
+    log.Printf("tou= %v unix= %v", tou.Format(DateTimeFmt), tou.Unix())
+    //2019/01/28 09:40:40 datetime.go:81: b= 2019/01/28 09:34:46 unix= 1548639286 unixNano= 1548639286891265000
+    //2019/01/28 09:41:06 datetime.go:86: tr= 2019/01/28 08:00:00 unix= 1548633600
+    //2019/01/28 09:41:06 datetime.go:87: tou= 2019/01/28 08:00:00 unix= 1548633600
+}
+
 func main() {
     log.SetFlags(log.LstdFlags | log.Lshortfile)
-    timestampTruncate()
+    //timestampTruncate()
+    //timestampRound()
+
+    timestampWhy()
+
 }
