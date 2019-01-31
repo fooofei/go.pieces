@@ -4,6 +4,7 @@ import (
     "container/list"
     "context"
     "encoding/json"
+    "flag"
     "fmt"
     "io"
     "io/ioutil"
@@ -22,6 +23,8 @@ type ParallelHttpCtx struct {
     Results         *list.List
     Wg              sync.WaitGroup
     WaitCtx         context.Context
+    WaitTimeout     int
+    WaitTimeoutDur  time.Duration
 }
 type IpGetter func(r io.Reader) (string, error)
 
@@ -178,6 +181,9 @@ func GetIpInPlainText(r io.Reader) (string, error) {
 // 3 没有必要设置捕获 signal 信号，CTRL +C 可以在任意时刻退出，go 保证
 //   我们也没有要优雅退出的需求
 func main() {
+    ctx := new(ParallelHttpCtx)
+    flag.IntVar(&ctx.WaitTimeout, "wait", 3, "wait for timeout seconds")
+    flag.Parse()
     // no need to use https://api.ipify.org/?format=json
     pubSrvs := &[...]WorkItem{
         {Uri: "https://ip.nf/me.json", IpGetter: GetIpInJsonIpIp},
@@ -189,14 +195,14 @@ func main() {
         {Uri: "https://ifconfig.co/ip", IpGetter: GetIpInPlainText},
     }
     log.SetFlags(log.LstdFlags | log.Lshortfile)
-    log.SetPrefix(fmt.Sprintf("pid= %v ",os.Getpid()))
-    ctx := new(ParallelHttpCtx)
+    log.SetPrefix(fmt.Sprintf("pid= %v ", os.Getpid()))
+    ctx.WaitTimeoutDur = time.Second * time.Duration(ctx.WaitTimeout)
     ctx.Results = list.New()
     ctx.ResultCh = make(chan *WorkItem, len(pubSrvs))
     ctx.AllResultDoneCh = make(chan struct{})
     var cancel context.CancelFunc
     ctx.WaitCtx, cancel = context.WithCancel(context.Background())
-
+    log.Printf("do work")
     for i := 0; i < len(pubSrvs); i += 1 {
         ctx.Wg.Add(1)
         go fetchIpRoutine(&pubSrvs[i], ctx)
@@ -206,7 +212,7 @@ func main() {
     go waitAllResultRoutine(ctx, len(pubSrvs))
     // wait timeout or all done
     select {
-    case <-time.After(time.Second * 3):
+    case <-time.After(ctx.WaitTimeoutDur):
         log.Printf("main timeup, cancel it beforehand")
         cancel()
     case <-ctx.AllResultDoneCh:
