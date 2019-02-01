@@ -17,18 +17,20 @@ import (
     "time"
 )
 
-type ParallelHttpCtx struct {
-    ResultCh        chan *WorkItem
-    AllResultDoneCh chan struct{}
+type parallelHttpCtx struct {
+    ResultCh        chan *workItem
+    AllResultDoneCh chan bool
     Results         *list.List
     Wg              sync.WaitGroup
     WaitCtx         context.Context
     WaitTimeout     int
     WaitTimeoutDur  time.Duration
 }
+
+// IpGetter defines get ip from url response text
 type IpGetter func(r io.Reader) (string, error)
 
-type WorkItem struct {
+type workItem struct {
     Uri      string
     IpGetter IpGetter
     Result   string
@@ -37,7 +39,7 @@ type WorkItem struct {
 // do http.get with context.Context
 // context can be cancel()
 // not care about err, only push result to chan
-func fetchIpRoutine(wk *WorkItem, ctx *ParallelHttpCtx) {
+func fetchIpRoutine(wk *workItem, ctx *parallelHttpCtx) {
     defer ctx.Wg.Done()
     defer func() {
         // always push result
@@ -68,7 +70,7 @@ func fetchIpRoutine(wk *WorkItem, ctx *ParallelHttpCtx) {
 // wait all sub routines result
 // when all result done before cancel() then notify a chan
 // can be cancel()
-func waitAllResultRoutine(ctx *ParallelHttpCtx, cnt int) {
+func waitAllResultRoutine(ctx *parallelHttpCtx, cnt int) {
     defer ctx.Wg.Done()
     //
     for i := 0; i < cnt; i += 1 {
@@ -82,7 +84,7 @@ func waitAllResultRoutine(ctx *ParallelHttpCtx, cnt int) {
     close(ctx.AllResultDoneCh)
 }
 
-// find the most often result
+// Pair help find the most often result
 type Pair struct {
     Key   string
     Value int
@@ -92,7 +94,7 @@ type PairArray []Pair
 func (p PairArray) Len() int               { return len(p) }
 func (p PairArray) Less(i int, j int) bool { return p[i].Value < p[j].Value }
 func (p PairArray) Swap(i int, j int)      { p[i], p[j] = p[j], p[i] }
-func getTop(ctx *ParallelHttpCtx) string {
+func getTop(ctx *parallelHttpCtx) string {
     const defaultr = "0.0.0.1"
     if ctx.Results.Len() <= 0 {
         return defaultr
@@ -100,7 +102,7 @@ func getTop(ctx *ParallelHttpCtx) string {
     //
     rm := make(map[string]int, ctx.Results.Len())
     for e := ctx.Results.Front(); e != nil; e = e.Next() {
-        v := e.Value.(*WorkItem)
+        v := e.Value.(*workItem)
         if v.Result != "" {
             rm[v.Result] ++
         }
@@ -118,7 +120,7 @@ func getTop(ctx *ParallelHttpCtx) string {
     return ra[0].Key
 }
 
-// parse result for https://ip.nf/me.json
+// GetIpInJsonIpIp parse result for https://ip.nf/me.json
 func GetIpInJsonIpIp(r io.Reader) (string, error) {
     b, err := ioutil.ReadAll(r)
     if err != nil {
@@ -136,7 +138,7 @@ func GetIpInJsonIpIp(r io.Reader) (string, error) {
     return "", fmt.Errorf("not found ip in %v", string(b))
 }
 
-// parse result for http://ip-api.com/json
+// GetIpInJsonQuery parse result for http://ip-api.com/json
 func GetIpInJsonQuery(r io.Reader) (string, error) {
     b, err := ioutil.ReadAll(r)
     if err != nil {
@@ -151,7 +153,7 @@ func GetIpInJsonQuery(r io.Reader) (string, error) {
     return "", fmt.Errorf("not found ip in %v", string(b))
 }
 
-// parse result for https://wtfismyip.com/json
+// GetIpInJsonYourFuck parse result for https://wtfismyip.com/json
 func GetIpInJsonYourFuck(r io.Reader) (string, error) {
     b, err := ioutil.ReadAll(r)
     if err != nil {
@@ -165,6 +167,7 @@ func GetIpInJsonYourFuck(r io.Reader) (string, error) {
     }
     return "", fmt.Errorf("not found ip in %v", string(b))
 }
+// GetIpInPlainText return ip from plain text
 func GetIpInPlainText(r io.Reader) (string, error) {
     b, err := ioutil.ReadAll(r)
     if err != nil {
@@ -181,11 +184,13 @@ func GetIpInPlainText(r io.Reader) (string, error) {
 // 3 没有必要设置捕获 signal 信号，CTRL +C 可以在任意时刻退出，go 保证
 //   我们也没有要优雅退出的需求
 func main() {
-    ctx := new(ParallelHttpCtx)
+    ctx := new(parallelHttpCtx)
+    var cancel context.CancelFunc
+    //
     flag.IntVar(&ctx.WaitTimeout, "wait", 3, "wait for timeout seconds")
     flag.Parse()
     // no need to use https://api.ipify.org/?format=json
-    pubSrvs := &[...]WorkItem{
+    pubSrvs := &[...]workItem{
         {Uri: "https://ip.nf/me.json", IpGetter: GetIpInJsonIpIp},
         {Uri: "http://ip-api.com/json", IpGetter: GetIpInJsonQuery},
         {Uri: "https://wtfismyip.com/json", IpGetter: GetIpInJsonYourFuck},
@@ -194,14 +199,16 @@ func main() {
         {Uri: "https://ifconfig.me/ip", IpGetter: GetIpInPlainText},
         {Uri: "https://ifconfig.co/ip", IpGetter: GetIpInPlainText},
     }
+    // log init
     log.SetFlags(log.LstdFlags | log.Lshortfile)
     log.SetPrefix(fmt.Sprintf("pid= %v ", os.Getpid()))
+    // ctx init
     ctx.WaitTimeoutDur = time.Second * time.Duration(ctx.WaitTimeout)
     ctx.Results = list.New()
-    ctx.ResultCh = make(chan *WorkItem, len(pubSrvs))
-    ctx.AllResultDoneCh = make(chan struct{})
-    var cancel context.CancelFunc
+    ctx.ResultCh = make(chan *workItem, len(pubSrvs))
+    ctx.AllResultDoneCh = make(chan bool)
     ctx.WaitCtx, cancel = context.WithCancel(context.Background())
+    //
     log.Printf("do work")
     for i := 0; i < len(pubSrvs); i += 1 {
         ctx.Wg.Add(1)
