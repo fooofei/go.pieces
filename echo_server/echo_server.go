@@ -5,6 +5,7 @@ import (
     "flag"
     "fmt"
     "github.com/fooofei/go_pieces/echo_server/rlimit"
+    "io"
     "log"
     "net"
     "os"
@@ -15,7 +16,8 @@ import (
     "time"
 )
 
-type EchoContext struct {
+// EchoContext defines the echo server context
+type echoContext struct {
     Laddr   string
     WaitCtx context.Context
     Wg      *sync.WaitGroup
@@ -24,7 +26,7 @@ type EchoContext struct {
     SubCnn  uint32
 }
 
-func SetupSignal(ctx *EchoContext, cancel context.CancelFunc) {
+func setupSignal(ctx *echoContext, cancel context.CancelFunc) {
 
     sigCh := make(chan os.Signal, 2)
 
@@ -42,19 +44,24 @@ func SetupSignal(ctx *EchoContext, cancel context.CancelFunc) {
     }()
 }
 
-func EchoConn(ctx *EchoContext, cnn net.Conn) {
-
-    atomic.AddUint32(&ctx.AddCnn, 1)
+func takeoverCnnClose(ctx *echoContext, cnn io.Closer) chan bool {
     cnnClosedCh := make(chan bool, 1)
     ctx.Wg.Add(1)
     go func() {
         select {
         case <-cnnClosedCh:
         case <-ctx.WaitCtx.Done():
-            _ = cnn.Close()
         }
+        _ = cnn.Close()
         ctx.Wg.Done()
     }()
+    return cnnClosedCh
+}
+
+func echoConn(ctx *echoContext, cnn net.Conn) {
+
+    atomic.AddUint32(&ctx.AddCnn, 1)
+    cnnClosedCh := takeoverCnnClose(ctx, cnn)
 
     //copy until EOF
     //_, _ = io.Copy(cnn, cnn)
@@ -127,7 +134,6 @@ func EchoConn(ctx *EchoContext, cnn net.Conn) {
     }()
     subWg.Wait()
     close(cnnClosedCh)
-    _ = cnn.Close()
     ctx.Wg.Done()
     atomic.AddUint32(&ctx.SubCnn, 1)
 }
@@ -137,7 +143,7 @@ func main() {
     log.SetFlags(log.LstdFlags | log.Lshortfile)
     log.SetPrefix(fmt.Sprintf("pid= %v ", os.Getpid()))
 
-    ctx := new(EchoContext)
+    ctx := new(echoContext)
     flag.StringVar(&ctx.Laddr, "laddr", "", "The local listen addr")
     flag.Parse()
     if ctx.Laddr == "" {
@@ -160,22 +166,13 @@ func main() {
 
     log.Printf("working on \"%v\"", ctx.Laddr)
 
-    SetupSignal(ctx, cancel)
+    setupSignal(ctx, cancel)
     // a routine to wake up accept()
-    cnnClosedCh := make(chan bool, 1)
-    ctx.Wg.Add(1)
-    go func() {
-        select {
-        case <-ctx.WaitCtx.Done():
-            _ = cnn.Close()
-        case <-cnnClosedCh:
-        }
-        ctx.Wg.Done()
-    }()
+    cnnClosedCh := takeoverCnnClose(ctx, cnn)
 
     // stat
     ctx.Wg.Add(1)
-    go func(ctx *EchoContext) {
+    go func(ctx *echoContext) {
         tick := time.NewTicker(ctx.StatDur)
     loop1:
         for {
@@ -198,7 +195,7 @@ loop:
         }
 
         ctx.Wg.Add(1)
-        go EchoConn(ctx, cltCnn)
+        go echoConn(ctx, cltCnn)
 
     }
     _ = cnn.Close()
