@@ -61,14 +61,14 @@ func EchoConn(ctx *EchoContext, cnn net.Conn) {
     //
     //ctx.Wg.Add(1)
     //go func() {
-    //  select {
-    //  case <-ctx.WaitCtx.Done():
-    //  case <-time.After(time.Second * 8):
-    //      tcp, _ := cnn.(*net.TCPConn)
-    //      _ = tcp.CloseWrite()
-    //      log.Printf("close write")
-    //  }
-    //  ctx.Wg.Done()
+    //   select {
+    //   case <-ctx.WaitCtx.Done():
+    //   case <-time.After(time.Second * 8):
+    //       tcp, _ := cnn.(*net.TCPConn)
+    //       _ = tcp.CloseWrite()
+    //       log.Printf("close write")
+    //   }
+    //   ctx.Wg.Done()
     //}()
 
     // read and write must move to routine
@@ -88,7 +88,7 @@ func EchoConn(ctx *EchoContext, cnn net.Conn) {
                 log.Printf("Write err= %v break", err)
                 break wloop
             }
-            log.Printf("Write = %v", n)
+            log.Printf("Write = [%v][%v]", n, c)
 
             select {
             case <-time.After(time.Second):
@@ -113,7 +113,7 @@ func EchoConn(ctx *EchoContext, cnn net.Conn) {
                 log.Printf("Read err= %v break", err)
                 break rloop
             }
-            log.Printf("Read = %s", buf[:n])
+            log.Printf("Read = [%v][%s]", n, buf[:n])
 
             select {
             case <-time.After(time.Second):
