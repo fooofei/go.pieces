@@ -1,7 +1,10 @@
 package main
 
 import (
+    "bytes"
     "context"
+    "encoding/binary"
+    "encoding/hex"
     "flag"
     "fmt"
     "io"
@@ -95,6 +98,34 @@ wloop:
     }
 }
 
+func setToaOpt(cnn net.Conn){
+    const TCP_TOA int=512
+    tcpcnn,_ := cnn.(*net.TCPConn)
+
+    file,_ := tcpcnn.File()
+
+
+    addr := new(syscall.RawSockaddrInet4)
+    bport := make([]byte,2)
+    binary.LittleEndian.PutUint16(bport,22)
+    addr.Port = binary.BigEndian.Uint16(bport)
+    addr.Family = syscall.AF_INET
+
+    _ = copy(addr.Addr[:], net.ParseIP("100.101.102.103").To4())
+    // convert bytes to string
+    b := new(bytes.Buffer)
+    _ = binary.Write(b, binary.BigEndian, addr)
+    log.Printf("setsockopt TCP_TOA= %v", hex.EncodeToString(b.Bytes()))
+    err := syscall.SetsockoptString(int(file.Fd()), syscall.IPPROTO_IP, TCP_TOA,b.String())
+    if err != nil {
+        log.Printf("setsockopt TCP_TOA err= %v", err)
+    }
+    // the File() will set fd to block mode, we revert it
+    // cannot write after tcpcnn.File(), will not work
+    _ = syscall.SetNonblock(int(file.Fd()),true)
+
+}
+
 func main() {
 
     ctx := new(txContext)
@@ -117,6 +148,7 @@ func main() {
     ctx.WaitCtx, cancel = context.WithCancel(context.Background())
     dia := &net.Dialer{}
     cnn, err = dia.DialContext(ctx.WaitCtx, "tcp", ctx.Raddr)
+    // still don't have a way to setsockopt before connect
     if err != nil {
         log.Fatal(err)
     }
