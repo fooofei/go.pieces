@@ -90,11 +90,20 @@ func timestampWhy(){
     //2019/01/28 09:41:06 datetime.go:87: tou= 2019/01/28 08:00:00 unix= 1548633600
 }
 
+func timestampBasic(){
+    ts := int64(1552482060)
+    t := time.Unix(ts,0)
+    //t.In(time.UTC)
+
+    log.Printf("t=%v ", t.Format(DateTimeFmt))
+}
+
 func main() {
     log.SetFlags(log.LstdFlags | log.Lshortfile)
     //timestampTruncate()
     //timestampRound()
 
-    timestampWhy()
+    //timestampWhy()
 
+    timestampBasic()
 }

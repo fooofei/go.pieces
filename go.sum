@@ -1,3 +1,5 @@
+github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ=
+github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/bifurcation/mint v0.0.0-20190129141059-83ba9bc2ead9 h1:cJwkHhcmnrWFPCg8eUPm7JJCnhnF93lFUe2ukQnXvJ4=
 github.com/bifurcation/mint v0.0.0-20190129141059-83ba9bc2ead9/go.mod h1:zVt7zX3K/aDCk9Tj+VM7YymsX66ERvzCJzw8rFCX2JU=
 github.com/creack/goselect v0.0.0-20180501195510-58854f77ee8d h1:6o8WW5zZ+Ny9sbk69epnAPmBzrBaRnvci+l4+pqleeY=

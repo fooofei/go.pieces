@@ -1,6 +1,7 @@
 module github.com/fooofei/go_pieces
 
 require (
+	github.com/BurntSushi/toml v0.3.1
 	github.com/bifurcation/mint v0.0.0-20190129141059-83ba9bc2ead9
 	github.com/creack/goselect v0.0.0-20180501195510-58854f77ee8d // indirect
 	github.com/dustin/go-coap v0.0.0-20170214053734-ddcc80675fa4
