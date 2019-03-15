@@ -164,7 +164,7 @@ func main() {
     mgt0.WaitCtx, cancel = context.WithCancel(context.Background())
     //
     log.SetFlags(log.LstdFlags | log.Lshortfile)
-    log.SetPrefix(fmt.Sprintf("pid= %v", os.Getpid()))
+    log.SetPrefix(fmt.Sprintf("pid= %v ", os.Getpid()))
 
     fullPath, _ := os.Executable()
     cur := filepath.Dir(fullPath)
