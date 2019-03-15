@@ -181,14 +181,13 @@ func main() {
 
     if len(mgt0.Chans) == 0 {
         log.Printf("no chans to work")
-    } else {
-        for _, c := range mgt0.Chans {
-            mgt0.Wg.Add(1)
-            go func(arg0 *mgt, arg1 *cchan) {
-                setupCChanTCP(arg0, arg1)
-                arg0.Wg.Done()
-            }(mgt0, c)
-        }
+    }
+    for _, c := range mgt0.Chans {
+        mgt0.Wg.Add(1)
+        go func(arg0 *mgt, arg1 *cchan) {
+            setupCChanTCP(arg0, arg1)
+            arg0.Wg.Done()
+        }(mgt0, c)
     }
 
     // infinit wait
