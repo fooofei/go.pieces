@@ -74,6 +74,7 @@ func timestampRound() {
 }
 
 func timestampWhy(){
+    // Python 的 datetime 做不到这样 time <-> timestamp 互相转换
     unixNano := int64(1548639286891265000)
     b := time.Unix(0,unixNano)
     b.In(time.UTC)
