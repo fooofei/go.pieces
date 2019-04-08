@@ -34,6 +34,7 @@ type workItem struct {
     Uri      string
     IpGetter IpGetter
     Result   string
+    Take     time.Duration
 }
 
 // do http.get with context.Context
@@ -46,6 +47,8 @@ func fetchIpRoutine(wk *workItem, ctx *parallelHttpCtx) {
         ctx.ResultCh <- wk
     }()
     //
+    wk.Take = time.Hour // default is Hour
+    start := time.Now()
     clt := &http.Client{}
     req, err := http.NewRequest(http.MethodGet, wk.Uri, nil)
     if err != nil {
@@ -57,6 +60,10 @@ func fetchIpRoutine(wk *workItem, ctx *parallelHttpCtx) {
     if err != nil {
         return
     }
+    defer func() {
+        _ = resp.Body.Close()
+    }()
+    wk.Take = time.Since(start)
     if resp.StatusCode != 200 {
         return
     }
@@ -120,8 +127,23 @@ func getTop(ctx *parallelHttpCtx) string {
     return ra[0].Key
 }
 
+// http://ifcfg.cn/echo
+func getIpInJsonIP(r io.Reader) (string, error) {
+    b, err := ioutil.ReadAll(r)
+    if err != nil {
+        return "", err
+    }
+    m := make(map[string]interface{})
+    _ = json.Unmarshal(b, &m)
+    ip, ok := m["ip"].(string)
+    if ok {
+        return ip, nil
+    }
+    return "", fmt.Errorf("not found ip in %v", string(b))
+}
+
 // GetIpInJsonIpIp parse result for https://ip.nf/me.json
-func GetIpInJsonIpIp(r io.Reader) (string, error) {
+func getIpInJsonIPIP(r io.Reader) (string, error) {
     b, err := ioutil.ReadAll(r)
     if err != nil {
         return "", err
@@ -139,7 +161,7 @@ func GetIpInJsonIpIp(r io.Reader) (string, error) {
 }
 
 // GetIpInJsonQuery parse result for http://ip-api.com/json
-func GetIpInJsonQuery(r io.Reader) (string, error) {
+func getIpInJsonQuery(r io.Reader) (string, error) {
     b, err := ioutil.ReadAll(r)
     if err != nil {
         return "", err
@@ -154,7 +176,7 @@ func GetIpInJsonQuery(r io.Reader) (string, error) {
 }
 
 // GetIpInJsonYourFuck parse result for https://wtfismyip.com/json
-func GetIpInJsonYourFuck(r io.Reader) (string, error) {
+func getIpInJsonYourFuck(r io.Reader) (string, error) {
     b, err := ioutil.ReadAll(r)
     if err != nil {
         return "", err
@@ -167,8 +189,13 @@ func GetIpInJsonYourFuck(r io.Reader) (string, error) {
     }
     return "", fmt.Errorf("not found ip in %v", string(b))
 }
+
 // GetIpInPlainText return ip from plain text
-func GetIpInPlainText(r io.Reader) (string, error) {
+// https://api.ipify.org
+// https://ip.seeip.org
+// https://ifconfig.me/ip
+// https://ifconfig.co/ip
+func getIpInPlainText(r io.Reader) (string, error) {
     b, err := ioutil.ReadAll(r)
     if err != nil {
         return "", err
@@ -176,6 +203,28 @@ func GetIpInPlainText(r io.Reader) (string, error) {
     v := strings.TrimSpace(string(b))
     return v, nil
 }
+
+// http://ip.taobao.com/service/getIpInfo2.php?ip=myip
+func getIpInJsonTaobao(r io.Reader) (string, error) {
+    b,err := ioutil.ReadAll(r)
+    if err != nil {
+        return "",err
+    }
+    m := make(map[string]interface{})
+    _ = json.Unmarshal(b, &m)
+    if data,ok := m["data"].(map[string]interface{}) ;ok {
+        if ip,ok := data["ip"].(string) ; ok {
+            return ip,nil
+        }
+    }
+    return "", fmt.Errorf("not found ip in %v", string(b))
+}
+
+// 关于获取自己的 IP 这个需求，有使用 DNS 的方式的，命令为
+// dig +short TXT o-o.myaddr.l.google.com @114.114.114.114
+// 但是获取到的IP 与 http 获取到的不同
+// https://unix.stackexchange.com/questions/22615/how-can-i-get-my-external-ip-address-in-a-shell-script
+// https://poplite.xyz/post/2018/05/19/how-to-get-your-public-ip-by-dns-lookup.html
 
 // 1 并行发起http请求
 // 2 给定超时，有几个返回结果用几个返回结果
@@ -191,13 +240,21 @@ func main() {
     flag.Parse()
     // no need to use https://api.ipify.org/?format=json
     pubSrvs := &[...]workItem{
-        {Uri: "https://ip.nf/me.json", IpGetter: GetIpInJsonIpIp},
-        {Uri: "http://ip-api.com/json", IpGetter: GetIpInJsonQuery},
-        {Uri: "https://wtfismyip.com/json", IpGetter: GetIpInJsonYourFuck},
-        {Uri: "https://api.ipify.org", IpGetter: GetIpInPlainText},
-        {Uri: "https://ip.seeip.org", IpGetter: GetIpInPlainText},
-        {Uri: "https://ifconfig.me/ip", IpGetter: GetIpInPlainText},
-        {Uri: "https://ifconfig.co/ip", IpGetter: GetIpInPlainText},
+        //{Uri: "https://ip.nf/me.json", IpGetter: getIpInJsonIPIP},
+        {Uri: "http://ip-api.com/json", IpGetter: getIpInJsonQuery},
+        //{Uri: "https://wtfismyip.com/json", IpGetter: getIpInJsonYourFuck},
+        {Uri: "https://api.ipify.org", IpGetter: getIpInPlainText},
+        {Uri: "https://ip.seeip.org", IpGetter: getIpInPlainText},
+        //{Uri: "https://ifconfig.me/ip", IpGetter: getIpInPlainText},
+        //{Uri: "https://ifconfig.co/ip", IpGetter: getIpInPlainText},
+        // taobao 的服务不稳定
+        {Uri: "http://ip.taobao.com/service/getIpInfo2.php?ip=myip",
+            IpGetter: getIpInJsonTaobao},
+        //{Uri: "http://members.3322.org/dyndns/getip",IpGetter: getIpInPlainText},
+        {Uri: "http://ip.cip.cc",IpGetter: getIpInPlainText},
+        {Uri: "https://api.ip.sb/ip",IpGetter: getIpInPlainText},
+        {Uri: "http://ifcfg.cn/echo",IpGetter: getIpInJsonIP},
+        {Uri: "http://eth0.me",IpGetter: getIpInPlainText},
     }
     // log init
     log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -230,7 +287,8 @@ func main() {
     log.Printf("fetch result cnt= %v from %v", ctx.Results.Len(), len(pubSrvs))
     //fmt.Printf("The pub ip= %v\n", getTop(ctx))
     for i := 0; i < len(pubSrvs); i += 1 {
-        log.Printf("%v -> %v", pubSrvs[i].Uri, pubSrvs[i].Result)
+        log.Printf("%v -> %v take %.2f(s)",
+            pubSrvs[i].Uri, pubSrvs[i].Result,  pubSrvs[i].Take.Seconds())
     }
     fmt.Printf("%v", getTop(ctx))
     log.Printf("main exit")
