@@ -255,6 +255,7 @@ func main() {
         {Uri: "https://api.ip.sb/ip",IpGetter: getIpInPlainText},
         {Uri: "http://ifcfg.cn/echo",IpGetter: getIpInJsonIP},
         {Uri: "http://eth0.me",IpGetter: getIpInPlainText},
+        {Uri: "http://ip.360.cn/IPShare/info",IpGetter: getIpInJsonIP},
     }
     // log init
     log.SetFlags(log.LstdFlags | log.Lshortfile)
