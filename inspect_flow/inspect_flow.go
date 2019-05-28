@@ -141,17 +141,21 @@ loop:
 
 }
 
-func UtcNow() string {
+func utcNow() string {
     return time.Now().UTC().Format(DateTimeFmt)
 }
-func LocalNow() string {
+func localNow() string {
     return time.Now().Format(DateTimeFmt)
 }
 
-func BeautyJsonTime(j []byte) []byte {
+func beautyJson(cnt uint32, j []byte) []byte {
     m := make(map[string]interface{})
     _ = json.Unmarshal(j, &m)
-
+    //
+    m["0idx"]=cnt
+    m["0utcNow"] = utcNow()
+    m["0localNow"] = localNow()
+    //
     hitTime, ok := m["hitTime"].(float64)
     if ok {
         t := time.Unix(int64(hitTime), 0)
@@ -166,7 +170,7 @@ func BeautyJsonTime(j []byte) []byte {
     return j
 }
 
-func SetupSignal(ctx *FlowCtx, cancel context.CancelFunc) {
+func setupSignal(ctx *FlowCtx, cancel context.CancelFunc) {
 
     sigCh := make(chan os.Signal, 2)
 
@@ -187,9 +191,9 @@ func SetupSignal(ctx *FlowCtx, cancel context.CancelFunc) {
 func main() {
 
     raddr := flag.String("raddr", "", "sender addr of flow msg")
-    sdk_raddr := flag.String("sdk_raddr", "", "filter sdk raddr")
-    rs_raddr := flag.String("rs_raddr", "", "filter rs raddr")
-    beauty_jsn := flag.Bool("beauty_json", true, "use beauty json for msg")
+    sdkRaddr := flag.String("sdk_raddr", "", "filter sdk raddr")
+    rsRaddr := flag.String("rs_raddr", "", "filter rs raddr")
+    fBeautyJsn := flag.Bool("beauty_json", false, "use beauty json for msg")
     flag.Parse()
     if *raddr == "" {
         flag.Usage()
@@ -209,18 +213,18 @@ func main() {
     flowCtx.MsgCh = make(chan []byte, 1000*1000)
     flowCtx.WaitCtx, cancel = context.WithCancel(context.Background())
 
-    if *sdk_raddr != "" {
+    if *sdkRaddr != "" {
         sdk := make(map[string]interface{})
-        sdk["raddr"] = *sdk_raddr
+        sdk["raddr"] = *sdkRaddr
         filter["sdk"] = sdk
     }
-    if *rs_raddr != "" {
+    if *rsRaddr != "" {
         rs := make(map[string]interface{})
-        rs["raddr"] = *rs_raddr
+        rs["raddr"] = *rsRaddr
         filter["rs"] = rs
     }
 
-    SetupSignal(flowCtx, cancel)
+    setupSignal(flowCtx, cancel)
     flowCtx.Wg.Add(1)
     go Dial(flowCtx, txM)
 
@@ -230,16 +234,15 @@ loop:
         case err = <-flowCtx.ErrsCh:
             log.Printf("got err =%v", err)
         case msg := <-flowCtx.MsgCh:
-            msg = BeautyJsonTime(msg)
-            if *beauty_jsn {
+            msg = beautyJson(flowCtx.MsgDeq, msg)
+            if *fBeautyJsn {
                 bb := new(bytes.Buffer)
                 err = json.Indent(bb, []byte(msg), "", "\t")
                 if err == nil {
                     msg = bb.Bytes()
                 }
             }
-
-            fmt.Printf("[%v]--utc=%v local=%v %s\n", flowCtx.MsgDeq, UtcNow(), LocalNow(), msg)
+            fmt.Printf("%s\n",msg)
             atomic.AddUint32(&flowCtx.MsgDeq, 1)
         case <-flowCtx.WaitCtx.Done():
             log.Printf("main thread got exit, break loop")
