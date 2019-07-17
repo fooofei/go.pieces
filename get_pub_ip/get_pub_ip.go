@@ -232,6 +232,11 @@ func getIpInJsonTaobao(r io.Reader) (string, error) {
 //   我们就不必要一直死等超时，直接取用结果
 // 3 没有必要设置捕获 signal 信号，CTRL +C 可以在任意时刻退出，go 保证
 //   我们也没有要优雅退出的需求
+// https://api.myip.com/ 美国
+// https://myexternalip.com/json 美国
+// https://ipapi.co/json 美国
+// https://ident.me/.json 英国
+// https://get.geojs.io/v1/ip.json 美国
 func main() {
     ctx := new(parallelHttpCtx)
     var cancel context.CancelFunc
