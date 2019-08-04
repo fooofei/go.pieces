@@ -185,3 +185,13 @@ func TestDeleteFromSlice(t *testing.T) {
 	afterPopBack2 := append(make([]int, 0), s[:len(s)-1]...)
 	assert.Equal(t, IntArray(afterPopBack2).Breif(), "cap=2 len=2")
 }
+
+func TestClearFixedArray(t *testing.T) {
+
+	a := [4]int{1, 2, 3, 4}
+	assert.Equal(t, IntArray(a[:]).Details(), "{1,2,3,4,}")
+
+	// clear
+	copy(a[:], make([]int, len(a)))
+	assert.Equal(t, IntArray(a[:]).Details(), "{0,0,0,0,}")
+}
