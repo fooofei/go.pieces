@@ -195,3 +195,54 @@ func TestClearFixedArray(t *testing.T) {
 	copy(a[:], make([]int, len(a)))
 	assert.Equal(t, IntArray(a[:]).Details(), "{0,0,0,0,}")
 }
+
+func TestClearSlice(t *testing.T) {
+
+	a := make([]int, 4)
+
+	assert.Equal(t, IntArray(a).Details(), "{0,0,0,0,}")
+	assert.Equal(t, IntArray(a).Breif(), "cap=4 len=4")
+
+	a = a[:0]
+	assert.Equal(t, IntArray(a).Details(), "{}")
+	assert.Equal(t, IntArray(a).Breif(), "cap=4 len=0")
+
+}
+
+func TestCopySliceGood(t *testing.T) {
+	// a is a buf cap=4 len=4
+	a := make([]int, 4)
+
+	assert.Equal(t, IntArray(a).Details(), "{0,0,0,0,}")
+	assert.Equal(t, IntArray(a).Breif(), "cap=4 len=4")
+	b := [4]int{1, 2, 3, 4}
+	assert.Equal(t, IntArray(b[:]).Details(), "{1,2,3,4,}")
+	assert.Equal(t, IntArray(b[:]).Breif(), "cap=4 len=4")
+
+	r := copy(a, b[:])
+
+	assert.Equal(t, r, 4)
+	assert.Equal(t, IntArray(a).Details(), "{1,2,3,4,}")
+	assert.Equal(t, IntArray(a).Breif(), "cap=4 len=4")
+}
+
+func TestCopySliceBad(t *testing.T) {
+	// a is a buf cap=4 len=4
+	a := make([]int, 4)
+
+	assert.Equal(t, IntArray(a).Details(), "{0,0,0,0,}")
+	assert.Equal(t, IntArray(a).Breif(), "cap=4 len=4")
+	b := [4]int{1, 2, 3, 4}
+	assert.Equal(t, IntArray(b[:]).Details(), "{1,2,3,4,}")
+	assert.Equal(t, IntArray(b[:]).Breif(), "cap=4 len=4")
+
+	a = a[:0]
+	assert.Equal(t, IntArray(a).Details(), "{}")
+	assert.Equal(t, IntArray(a).Breif(), "cap=4 len=0")
+
+	r := copy(a, b[:])
+
+	assert.Equal(t, r, 0)
+	assert.Equal(t, IntArray(a).Details(), "{}")
+	assert.Equal(t, IntArray(a).Breif(), "cap=4 len=0")
+}
