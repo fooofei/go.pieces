@@ -1,10 +1,11 @@
 package go_pieces
 
 import (
-	"gotest.tools/assert"
 	"log"
 	"testing"
 	"time"
+
+	"gotest.tools/assert"
 )
 
 const (
