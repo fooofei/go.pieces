@@ -131,7 +131,7 @@ func TestSelectNilChan(t *testing.T) {
 	select {
 	case v := <-a:
 		t.Logf("2got %v from chan\n", v)
-	case <-time.After(time.Second):
+	case <-time.After(time.Millisecond * 50):
 		// we also wait a timer
 		t.Logf("second select timeout of time.Second")
 	}

@@ -1,7 +1,6 @@
 package go_pieces
 
 import (
-	"log"
 	"testing"
 	"time"
 
@@ -15,10 +14,10 @@ const (
 func TestTimestampBaseTime(t *testing.T) {
 	// One day of time
 	nextTime := time.Date(0, 0, 0, 1, 0, 0, 0, time.Now().Location())
-	log.Printf("we need timeOff= %v", nextTime.Format(time.RFC3339))
 	// the timeOff begin with base
 	baseTime := time.Date(0, 0, 0, 0, 0, 0, 0, time.Now().Location())
 	t.Logf("baseTime=%v Date(0)", baseTime.Format(time.RFC3339))
+	t.Logf("baseTime + 1h = nextTime = %v", nextTime.Format(time.RFC3339))
 
 	dur := nextTime.Sub(baseTime)
 	assert.Equal(t, dur, time.Hour*1)
