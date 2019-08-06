@@ -1,7 +1,6 @@
 package go_pieces
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -17,8 +16,8 @@ type point struct {
 // error Sprintf format %s with arg s causes recursive String method call
 
 func (p *point) String() string {
-	return fmt.Sprintf("%s", p) // because Sprintf will call s.String()
-	//return ""
+	//return fmt.Sprintf("%s", p) // because Sprintf will call s.String()
+	return ""
 }
 
 func TestGoroutineStackOverflow(t *testing.T) {
