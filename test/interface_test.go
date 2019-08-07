@@ -2,8 +2,9 @@ package go_pieces
 
 import (
 	"fmt"
-	"gotest.tools/assert"
 	"testing"
+
+	"gotest.tools/assert"
 )
 
 func switchInterface(inInterface interface{}) (interface{}, error) {
