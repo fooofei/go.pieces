@@ -2,4 +2,4 @@
 Golang code pieces
 
 
-`go test -v`
+including `*_test.go` files and tools
