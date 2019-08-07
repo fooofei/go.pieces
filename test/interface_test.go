@@ -28,6 +28,7 @@ func TestSwitchInterface(t *testing.T) {
 
 	v1, v2 = switchInterface(false)
 	assert.Equal(t, v1, nil)
+	assert.Equal(t, v1 == nil, true)
 	assert.ErrorContains(t, v2, "unknown")
 	t.Log(v2)
 }
