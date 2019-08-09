@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	rlimt "echo_server/rlimit"
 	"flag"
@@ -18,29 +19,51 @@ import (
 
 // echoContext defines the echo server context
 type echoContext struct {
-	LAddr   string
-	WaitCtx context.Context
-	Wg      *sync.WaitGroup
-	StatDur time.Duration
-	AddCnn  int64
-	SubCnn  int64
+	LAddr     string
+	WaitCtx   context.Context
+	Wg        *sync.WaitGroup
+	StatDur   time.Duration
+	StartTime time.Time
+	//
+	AddCnn int64
+	SubCnn int64
+	RxSize int64
+	TxSize int64
 }
 
-func setupSignal(ectx *echoContext, cancel context.CancelFunc) {
+func (echoCtx *echoContext) state() string {
+	dur := time.Since(echoCtx.StartTime)
+	interval := dur.Seconds()
+	w := &bytes.Buffer{}
+	if interval > 0 {
+		unit := interval * 1024 * 1024
+		rx := atomic.LoadInt64(&echoCtx.RxSize)
+		tx := atomic.LoadInt64(&echoCtx.TxSize)
+		_, _ = fmt.Fprintf(w, "time take %v (s)\n", int64(interval))
+		_, _ = fmt.Fprintf(w, "come connection = %v leave connection= %v\n",
+			atomic.LoadInt64(&echoCtx.AddCnn),
+			atomic.LoadInt64(&echoCtx.SubCnn))
+		_, _ = fmt.Fprintf(w, "rx %v/%v= %.3f MiB/s\n", rx, int64(interval), float64(rx)/unit)
+		_, _ = fmt.Fprintf(w, "tx %v/%v= %.3f MiB/s", tx, int64(interval), float64(tx)/unit)
+	}
+	return w.String()
+}
+
+func setupSignal(echoCtx *echoContext, cancel context.CancelFunc) {
 
 	sigCh := make(chan os.Signal, 2)
 
 	signal.Notify(sigCh, os.Interrupt)
 	signal.Notify(sigCh, syscall.SIGTERM)
 
-	ectx.Wg.Add(1)
+	echoCtx.Wg.Add(1)
 	go func() {
 		select {
 		case <-sigCh:
 			cancel()
-		case <-ectx.WaitCtx.Done():
+		case <-echoCtx.WaitCtx.Done():
 		}
-		ectx.Wg.Done()
+		echoCtx.Wg.Done()
 	}()
 }
 
@@ -59,26 +82,42 @@ func takeOverCnnClose(waitCtx context.Context, cnn io.Closer) (chan bool, *sync.
 	return noWait, waitGrp
 }
 
-func echoConn(ctx *echoContext, cnn net.Conn) {
+func echoConn(echoCtx *echoContext, cnn net.Conn) {
 
-	atomic.AddInt64(&ctx.AddCnn, 1)
-	noWait, waitGrp := takeOverCnnClose(ctx.WaitCtx, cnn)
+	atomic.AddInt64(&echoCtx.AddCnn, 1)
+	noWait, waitGrp := takeOverCnnClose(echoCtx.WaitCtx, cnn)
 
 	//copy until EOF
 	buf := make([]byte, 128*1024)
-	_, _ = io.CopyBuffer(cnn, cnn, buf)
+	for {
+		nr, er := cnn.Read(buf)
+		if nr > 0 {
+			atomic.AddInt64(&echoCtx.RxSize, int64(nr))
+			nw, ew := cnn.Write(buf[:nr])
+			if nw > 0 {
+				atomic.AddInt64(&echoCtx.TxSize, int64(nw))
+			}
+			if ew != nil {
+				break
+			}
+
+		}
+		if er != nil {
+			break
+		}
+	}
 	close(noWait)
 	waitGrp.Wait()
-	atomic.AddInt64(&ctx.SubCnn, 1)
+	atomic.AddInt64(&echoCtx.SubCnn, 1)
 }
 
-func listenAndServe(ectx *echoContext) {
-	cnn, err := net.Listen("tcp", ectx.LAddr)
+func listenAndServe(echoCtx *echoContext) {
+	cnn, err := net.Listen("tcp", echoCtx.LAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
 	// a routine to wake up accept()
-	noWait, waitGrp := takeOverCnnClose(ectx.WaitCtx, cnn)
+	noWait, waitGrp := takeOverCnnClose(echoCtx.WaitCtx, cnn)
 
 loop:
 	for {
@@ -87,26 +126,25 @@ loop:
 			break loop
 		}
 
-		ectx.Wg.Add(1)
+		echoCtx.Wg.Add(1)
 		go func(arg0 *echoContext, arg1 net.Conn) {
 			echoConn(arg0, arg1)
-			ectx.Wg.Done()
-		}(ectx, cltCnn)
+			echoCtx.Wg.Done()
+		}(echoCtx, cltCnn)
 
 	}
 	close(noWait)
 	waitGrp.Wait()
 }
-func stat(ectx *echoContext) {
-	tick := time.NewTicker(ectx.StatDur)
+func stat(echoCtx *echoContext) {
+	tick := time.NewTicker(echoCtx.StatDur)
 loop1:
 	for {
 		select {
-		case <-ectx.WaitCtx.Done():
+		case <-echoCtx.WaitCtx.Done():
 			break loop1
 		case <-tick.C:
-			log.Printf("stat AddCnn= %v SubCnn= %v Add-Sub= %v",
-				ectx.AddCnn, ectx.SubCnn, ectx.AddCnn-ectx.SubCnn)
+			log.Printf("%v\n", echoCtx.state())
 		}
 	}
 }
@@ -117,26 +155,27 @@ func main() {
 	log.SetPrefix(fmt.Sprintf("pid= %v ", os.Getpid()))
 
 	var cancel context.CancelFunc
-	ectx := new(echoContext)
-	ectx.WaitCtx, cancel = context.WithCancel(context.Background())
-	ectx.Wg = new(sync.WaitGroup)
-	ectx.StatDur = time.Second * 5
+	echoCtx := new(echoContext)
+	echoCtx.WaitCtx, cancel = context.WithCancel(context.Background())
+	echoCtx.Wg = new(sync.WaitGroup)
+	echoCtx.StatDur = time.Second * 5
+	echoCtx.StartTime = time.Now()
 
-	flag.StringVar(&ectx.LAddr, "laddr", ":3389", "The local listen addr")
+	flag.StringVar(&echoCtx.LAddr, "laddr", ":3389", "The local listen addr")
 	flag.Parse()
 	rlimt.BreakOpenFilesLimit()
-	log.Printf("working on \"%v\"", ectx.LAddr)
-	setupSignal(ectx, cancel)
+	log.Printf("working on \"%v\"", echoCtx.LAddr)
+	setupSignal(echoCtx, cancel)
 
 	// stat
-	ectx.Wg.Add(1)
+	echoCtx.Wg.Add(1)
 	go func() {
-		stat(ectx)
-		ectx.Wg.Done()
+		stat(echoCtx)
+		echoCtx.Wg.Done()
 	}()
 
-	listenAndServe(ectx)
+	listenAndServe(echoCtx)
 
-	ectx.Wg.Wait()
+	echoCtx.Wg.Wait()
 	log.Printf("main exit")
 }
