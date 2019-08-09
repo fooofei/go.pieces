@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"gotest.tools/assert"
 	"io"
 	"net"
 	"sync"
 	"testing"
 	"time"
+
+	"gotest.tools/assert"
 )
 
 // 1 告诉 sub routine exit，需要1个 chan ，在 main 中 close chan 就可以
@@ -152,63 +153,67 @@ func TestCloseChanTwice(t *testing.T) {
 // 这种技法的使用场景是一个 TCP 长连接，一直在收发数据
 // 如何给 读或者写 做 Context 接管结束生命周期呢
 // 就是这样使用
-func registerCloseCnn(waitCtx context.Context, c io.Closer) chan bool {
+// 统一吧，都返回 waitGroup
+func registerCloseCnn(waitCtx context.Context, c io.Closer) (chan bool, *sync.WaitGroup) {
 	// 甚至不需要 sync.WaitGroup ，因为一定会退出
-	noNeedWait := make(chan bool, 1)
-
+	noWait := make(chan bool, 1)
+	waitGrp := &sync.WaitGroup{}
+	waitGrp.Add(1)
 	go func() {
 		select {
 		case <-waitCtx.Done():
-		case <-noNeedWait:
+		case <-noWait:
 		}
 		_ = c.Close()
+		waitGrp.Done()
 	}()
-	return noNeedWait
+	return noWait, waitGrp
 }
 
 func TestRegisterCloseChanForever(t *testing.T) {
 	cnn := &net.TCPConn{}
 	waitCtx, cancel := context.WithCancel(context.Background())
 
-	noNeedWait := registerCloseCnn(waitCtx, cnn)
+	noWait, waitGrp := registerCloseCnn(waitCtx, cnn)
 
 	// do work
 	for {
 		break
 	}
 	// this will cnn.Close()
-	close(noNeedWait)
+	close(noWait)
+	waitGrp.Wait()
 	cancel()
 }
 
 // 另一个技法是 给一个没有 context 的操作封装一个 context 技法
 // 这样也能像使用 DialContext 那样随心所欲结束
 func registerWaitChan(waitCtx context.Context, c io.Closer) (chan bool, *sync.WaitGroup) {
-	noNeedWait := make(chan bool, 1)
+	noWait := make(chan bool, 1)
 	waitGrp := new(sync.WaitGroup)
 	waitGrp.Add(1)
 	go func() {
 		select {
-		case <-noNeedWait:
+		case <-noWait:
 		case <-waitCtx.Done():
 			_ = c.Close()
 		}
 		waitGrp.Done()
 	}()
-	return noNeedWait, waitGrp
+	return noWait, waitGrp
 }
 func TestRegisterWaitChan(t *testing.T) {
 	c := &net.TCPConn{}
 	waitCtx, cancel := context.WithCancel(context.Background())
 
 	// do some thing1
-	noNeedWait, waitGrp := registerWaitChan(waitCtx, c)
-	close(noNeedWait)
+	noWait, waitGrp := registerWaitChan(waitCtx, c)
+	close(noWait)
 	waitGrp.Wait() // must call wait here, wait
 
 	// do some thing2
-	noNeedWait, waitGrp = registerWaitChan(waitCtx, c)
-	close(noNeedWait)
+	noWait, waitGrp = registerWaitChan(waitCtx, c)
+	close(noWait)
 	waitGrp.Wait()
 
 	// do end
