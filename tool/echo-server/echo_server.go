@@ -44,29 +44,31 @@ func setupSignal(ectx *echoContext, cancel context.CancelFunc) {
 	}()
 }
 
-func takeOverCnnClose(ectx *echoContext, cnn io.Closer) chan bool {
-	cnnClosedCh := make(chan bool, 1)
-	ectx.Wg.Add(1)
+func takeOverCnnClose(waitCtx context.Context, cnn io.Closer) (chan bool, *sync.WaitGroup) {
+	noWait := make(chan bool, 1)
+	waitGrp := &sync.WaitGroup{}
+	waitGrp.Add(1)
 	go func() {
 		select {
-		case <-cnnClosedCh:
-		case <-ectx.WaitCtx.Done():
+		case <-noWait:
+		case <-waitCtx.Done():
 		}
 		_ = cnn.Close()
-		ectx.Wg.Done()
+		waitGrp.Done()
 	}()
-	return cnnClosedCh
+	return noWait, waitGrp
 }
 
 func echoConn(ctx *echoContext, cnn net.Conn) {
 
 	atomic.AddInt64(&ctx.AddCnn, 1)
-	cnnClosedCh := takeOverCnnClose(ctx, cnn)
+	noWait, waitGrp := takeOverCnnClose(ctx.WaitCtx, cnn)
 
 	//copy until EOF
 	buf := make([]byte, 128*1024)
 	_, _ = io.CopyBuffer(cnn, cnn, buf)
-	close(cnnClosedCh)
+	close(noWait)
+	waitGrp.Wait()
 	atomic.AddInt64(&ctx.SubCnn, 1)
 }
 
@@ -76,7 +78,7 @@ func listenAndServe(ectx *echoContext) {
 		log.Fatal(err)
 	}
 	// a routine to wake up accept()
-	cnnClosedCh := takeOverCnnClose(ectx, cnn)
+	noWait, waitGrp := takeOverCnnClose(ectx.WaitCtx, cnn)
 
 loop:
 	for {
@@ -92,7 +94,8 @@ loop:
 		}(ectx, cltCnn)
 
 	}
-	close(cnnClosedCh)
+	close(noWait)
+	waitGrp.Wait()
 }
 func stat(ectx *echoContext) {
 	tick := time.NewTicker(ectx.StatDur)
