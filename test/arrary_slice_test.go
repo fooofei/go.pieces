@@ -158,15 +158,20 @@ func ExampleArray2D() {
 	//(0,0,1)(0,1,2)(0,2,3)(1,0,4)(1,1,5)(1,2,6)(2,0,7)(2,1,8)(2,2,9)
 }
 
-func ExampleOutOfRangeSlice() {
+func TestOutOfRangeSlice(t *testing.T) {
 	arr := [...]int{1, 2, 3}
-	fmt.Printf("arr= %v\n", arr)
-	fmt.Printf("arr[2:]=%v\n", arr[2:])
-	// panic: runtime error: slice bounds out of range
-	//fmt.Printf("arr[5:]=%v\n", arr[2:][5:])
-	_ = arr
-	//output:arr= [1 2 3]
-	//arr[2:]=[3]
+	assert.Equal(t, IntArray(arr[:]).Details(), "{1,2,3,}")
+	assert.Equal(t, IntArray(arr[2:]).Details(), "{3,}")
+	idx := -1
+	//t.Logf("%v", arr[idx:]) // panic: runtime error: slice bounds out of range
+	//t.Logf("%v", arr[:idx]) // panic: runtime error: slice bounds out of range
+
+	idx = 5
+	//t.Logf("%v", arr[idx:]) // 	panic: runtime error: slice bounds out of range
+	//t.Logf("%v", arr[:idx]) // 	panic: runtime error: slice bounds out of range
+
+	_ = idx
+
 }
 
 func TestDeleteFromSlice(t *testing.T) {
