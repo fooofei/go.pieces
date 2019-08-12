@@ -10,6 +10,7 @@ function compile() {
     GOOS=linux GOARCH=amd64 go build -mod=vendor -v
     mv $name $name.linux
     go build -mod=vendor -v
+    GOOS=windows GOARCH=amd64 go build -mod=vendor -v
 }
 
 compile httping
