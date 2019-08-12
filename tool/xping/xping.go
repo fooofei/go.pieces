@@ -78,6 +78,7 @@ pingLoop:
 		bb.Reset()
 		start := time.Now()
 
+		log.Printf("wkCtx.W = %v", int64(wkCtx.W.Nanoseconds()/1000/1000))
 		pingOpWaitCtx, _ := context.WithTimeout(wkCtx.WaitCtx, wkCtx.W)
 		dur, err = po.Ping(pingOpWaitCtx, wkCtx.RAddr)
 		durNanoSec := dur.Nanoseconds()
@@ -126,26 +127,26 @@ func Ping(po PingOp) {
 
 	var cancel context.CancelFunc
 	var infinite bool
-	var W int
+	var W int64
 	wkCtx := new(WorkContext)
 	wkCtx.Wg = new(sync.WaitGroup)
 	wkCtx.WaitCtx, cancel = context.WithCancel(context.Background())
 
 	flag.BoolVar(&infinite, "t", false, "Ping until stopped with Ctrl+C")
 	flag.Int64Var(&wkCtx.N, "n", 4, "Number of requests to send")
-	flag.IntVar(&W, "w", 1000, "Wait timeout (ms) between two requests >50")
-	W -= 50
-
+	flag.Int64Var(&W, "w", 1000, "Wait timeout (ms) between two requests >50")
 	flag.Parse()
 	args := flag.Args()
 	if len(args) < 1 {
 		fmt.Printf("Please give addr\n")
 		return
 	}
+	W -= 50
 	if W <= 0 {
-		fmt.Printf("Invalid wait timeout = %v", W)
+		fmt.Printf("Invalid wait timeout = %v\n", W)
 		return
 	}
+	log.Printf("args t=%v n=%v w=%v", infinite, wkCtx.N, W)
 	wkCtx.RAddr = args[0]
 	wkCtx.W = time.Millisecond * time.Duration(W)
 
