@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"testing"
 	"time"
 )
 
@@ -172,4 +173,21 @@ func ExampleIpAddr() {
 	//output:
 	//googleDNS,[8 8 8 8],8.8.8.8,8.8.8.8
 	//loopback,[127 0 0 1],127.0.0.1,127.0.0.1
+}
+
+type MyRWC struct {
+	io.ReadWriteCloser // 会以 ReadWriteCloser 命名
+	buf                []byte
+}
+
+func newMyRWC() *MyRWC {
+	return &MyRWC{
+		ReadWriteCloser: nil,
+		buf:             nil,
+	}
+}
+
+func TestInterfaceAsStructField(t *testing.T) {
+	a := newMyRWC()
+	_ = a
 }
