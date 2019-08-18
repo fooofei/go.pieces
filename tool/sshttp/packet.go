@@ -1,12 +1,11 @@
 package sshttp
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"net/textproto"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -14,111 +13,69 @@ import (
 )
 
 const (
-	contentLengthName = "Content-Length"
+	DefaultUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko)" +
+		" Chrome/76.0.3809.100 Safari/537.36"
 )
 
-const (
-	Login = "login"
-	Proxy = "proxy"
-)
-
-type HttpPacket struct {
-	Type   string
-	Seq    int64
-	Ack    int64
-	Header map[string]string
-	Body   []byte
+type HttpPath struct {
+	Type string
+	Seq  int64
+	Ack  int64
 }
 
-func (hp *HttpPacket) Encode() []byte {
+func (hp *HttpPath) String() string {
 	w := &bytes.Buffer{}
-
-	_, _ = fmt.Fprintf(w, "POST /%v/%v/%v HTTP/1.1\r\n", hp.Type, hp.Seq, hp.Ack)
-	_, _ = fmt.Fprintf(w, "%v:%v\r\n", contentLengthName, len(hp.Body))
-	// Cookie ?
-
-	for k, v := range hp.Header {
-		_, _ = fmt.Fprintf(w, "%v:%v\r\n", k, v)
-	}
-	_, _ = fmt.Fprintf(w, "\r\n")
-	w.Write(hp.Body)
-	return w.Bytes()
+	_, _ = fmt.Fprintf(w, "/%v/%v/%v", hp.Type, hp.Seq, hp.Ack)
+	return w.String()
 }
 
-func (hp *HttpPacket) Decode(r io.Reader) error {
-
-	ioR := bufio.NewReader(r)
-	mimeReader := textproto.NewReader(ioR)
-	// get first line
-	headLine, err := mimeReader.ReadLine()
-	if err != nil {
-		return err
-	}
-	if len(headLine) == 0 {
-		return errors.Errorf("empty in first line")
-	}
-	maps, err := mimeReader.ReadMIMEHeader()
-	if err != nil {
-		return err
-	}
-
-	headLineSubs := strings.Split(headLine, " ")
-	if len(headLineSubs) < 3 {
-		return errors.Errorf("short head line \"%v\"", headLine)
-	}
-	headLineMiddle := headLineSubs[1]
-	tsa := strings.Split(headLineMiddle, "/")
+func ParseHTTPPath(path string) (*HttpPath, error) {
+	hp := &HttpPath{}
+	tsa := strings.Split(path, "/")
 	if len(tsa) < 4 {
-		return errors.Errorf("short head line middle \"%v\"", headLineMiddle)
+		return nil, errors.Errorf("short head http path \"%v\"", path)
 	}
 	hp.Type = tsa[1]
 	v1, err := strconv.ParseFloat(tsa[2], 64)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	hp.Seq = int64(v1)
 	v1, err = strconv.ParseFloat(tsa[3], 64)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	hp.Ack = int64(v1)
-
-	if hp.Header == nil {
-		hp.Header = make(map[string]string)
-	}
-	for k, v := range maps {
-		if len(v) > 0 {
-			hp.Header[k] = v[0]
-		} else {
-			hp.Header[k] = ""
-		}
-	}
-
-	// Read the rest of reader for body bytes
-	if sizeStr, exists := hp.Header[contentLengthName]; exists {
-		if size, err := strconv.ParseFloat(sizeStr, 64); err == nil {
-			if body, err := ioutil.ReadAll(ioR); err == nil {
-				if len(body) == int(size) {
-					hp.Body = body
-				}
-			}
-		}
-	}
-
-	delete(hp.Header, contentLengthName)
-
-	return nil
+	return hp, nil
 }
 
-func NewLogin() []byte {
-	p := &HttpPacket{}
-	p.Type = Login
-	return p.Encode()
+func ParseUrlPath(u *url.URL) (*HttpPath, error) {
+	return ParseHTTPPath(u.Path)
 }
 
-func NewProxyConnect(value string) []byte {
-	p := &HttpPacket{}
-	p.Type = Proxy
-	p.Header["Connect"] = value
-	return p.Encode()
+func NewDataRequest(seq int64, ack int64, body []byte) (*http.Request, error) {
+	return NewRequest("data", seq, ack, bytes.NewReader(body))
+}
+
+func NewRequest(reqType string, seq int64, ack int64, body io.Reader) (*http.Request, error) {
+	url := fmt.Sprintf("/%v/%v/%v", reqType, seq, ack)
+	r, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Set("User-Agent", DefaultUserAgent)
+	return r, err
+}
+
+func NewLogin() (*http.Request, error) {
+	return NewRequest("login", 0, 0, nil)
+}
+
+func NewProxyConnect(value string) (*http.Request, error) {
+	req, err := NewRequest("proxy", 0, 0, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Connect", value)
+	return req, nil
 }
