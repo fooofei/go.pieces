@@ -1,10 +1,10 @@
 package main
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -12,25 +12,109 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/fooofei/sshttp"
 )
 
 func usage(program string) string {
 	fmt1 := `
 Usage:
-	ssh -o "ProxyCommand %v proxy_server_host proxy_server_port %%h %%p" user@host
+	ssh -o "ProxyCommand %v proxy_server_host proxy_server_port %vh %vp" user@host
 	proxy_server_host: hostname on which Proxy Server runs on
 	proxy_server_port: TCP port number to connect to Proxy Server
 	user: SSH user
 	host: SSH host
 
 Example:
-	ssh -o "ProxyCommand %v 127.0.0.1 8888 %%h %%p" work@192.168.200.128
+	ssh -o "ProxyCommand %v 127.0.0.1 8888 %vh %vp" work@192.168.200.128
 `
-	return fmt.Sprintf(fmt1, program, program)
+	return fmt.Sprintf(fmt1, program, "%%", "%%", program, "%%", "%%")
 }
 
-func proxy() {
+func pipeConnReadApp(app io.Reader, tun *sshttp.Tunnel) {
+
+	buf := make([]byte, 128*1024)
+pipeLoop:
+	for {
+		nr, er := app.Read(buf)
+		if nr > 0 {
+			_, ew := tun.Write(buf[:nr])
+			if ew != nil {
+				log.Printf("err= %v", ew)
+				break pipeLoop
+			}
+		}
+		if er != nil {
+			log.Printf("err= %v", er)
+			break pipeLoop
+		}
+	}
+}
+func pipeConnReadTun(app io.Writer, tun *sshttp.Tunnel) {
+
+pipeLoop:
+	for {
+		nw, ew := tun.WriteTo(app)
+		if ew != nil {
+			log.Printf("WriteTo err= %v", ew)
+			break pipeLoop
+		}
+		_ = nw
+	}
+}
+
+func pipeConn(ctx context.Context, app io.ReadWriter, tun io.ReadWriteCloser,
+	sshdAddr string) {
+
+	t := &sshttp.Tunnel{
+		SndNxt:        0,
+		SndUna:        0,
+		RcvNxt:        0,
+		R:             bufio.NewReader(tun),
+		W:             tun,
+		Ctx:           ctx,
+		AckedSndNxtCh: make(chan int64, 1000),
+		CopyBuf:       make([]byte, 128*1024),
+	}
+
+	req, err := sshttp.NewLogin()
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = req.Write(t.W)
+	if err != nil {
+		log.Fatal(err)
+	}
+	req, err = sshttp.NewProxyConnect(sshdAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = req.Write(t.W)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	waitGrp := &sync.WaitGroup{}
+	waitGrp.Add(1)
+	once := &sync.Once{}
+	onceFunc := func() {
+		_ = tun.Close()
+	}
+	go func() {
+		pipeConnReadApp(app, t)
+		waitGrp.Done()
+		once.Do(onceFunc)
+	}()
+
+	waitGrp.Add(1)
+	go func() {
+		pipeConnReadTun(app, t)
+		waitGrp.Done()
+		once.Do(onceFunc)
+	}()
+	waitGrp.Wait()
+}
+
+func serve(ctx context.Context) {
 	pro := os.Args[0]
 	fmt.Printf("%v", usage(pro))
 
@@ -40,84 +124,47 @@ func proxy() {
 	sshdPort := os.Args[4]
 
 	addr := net.JoinHostPort(host, port)
+	sshdAddr := net.JoinHostPort(sshdHost, sshdPort)
 
-	_ = addr
-	_ = sshdPort
-	_ = sshdHost
-	// first login
-	//_, _ = conn.Write(sshttp.NewLogin())
-	//
-	//_, _ = conn.Write(sshttp.NewProxyConnect(net.JoinHostPort(sshdHost, sshdPort)))
+	log.Printf("proxy %v sshdAddr %v", addr, sshdAddr)
 
+	dialCtx, _ := context.WithTimeout(ctx, time.Second*300)
+	d := net.Dialer{}
+	tunConn, err := d.DialContext(dialCtx, "tcp", addr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	pipeConn(ctx, &sshttp.SSHPipeRW{}, tunConn, sshdAddr)
 }
 
 func main() {
 	var waitCtx context.Context
 	var cancel context.CancelFunc
 
-	log.SetFlags(log.Lshortfile)
+	log.SetFlags(log.Lshortfile | log.LstdFlags)
 	waitCtx, cancel = context.WithCancel(context.Background())
-	d := &websocket.Dialer{}
 
-	reqHeader := http.Header{}
-	reqHeader.Add("User-Agent", "Chrome76")
-	addr := "ws://:3389/aa"
-
-	conn, resp, err := d.DialContext(waitCtx, addr, reqHeader)
-	if err != nil {
-		log.Printf("resp= %v", resp)
-		if resp != nil {
-			log.Printf("code= %v ", resp.Status)
-			if body, err := ioutil.ReadAll(resp.Body); err == nil {
-				log.Printf("body = %s", body)
-			}
-		}
-		log.Fatalf("err= %v conn= %v", err, conn)
+	if len(os.Args) < 5 {
+		fmt.Printf(usage(os.Args[0]))
+		return
 	}
-
-	log.Printf("go to loop")
-	waitGrp := &sync.WaitGroup{}
-	once := &sync.Once{}
-	connCloseFunc := func() {
-		_ = conn.Close()
-	}
-	waitGrp.Add(1)
-	go func() {
-	readLoop:
-		for {
-			msgType, msg, err := conn.ReadMessage()
-			if err != nil {
-				break readLoop
-			}
-			log.Printf("type= %v msg= len= %v \"%s\"", msgType, len(msg), msg)
-		}
-
-		waitGrp.Done()
-		once.Do(connCloseFunc)
-	}()
-
-	waitGrp.Add(1)
-	go func() {
-		var cnt int64
-		var err error
-	writeLoop:
-		for {
-			select {
-			case <-time.After(time.Second * 5):
-				w := &bytes.Buffer{}
-				_, _ = fmt.Fprintf(w, "hello %v", cnt)
-				err = conn.WriteMessage(websocket.BinaryMessage, w.Bytes())
-				log.Printf("write \"%s\" err= %v", w.String(), err)
-				if err != nil {
-					break writeLoop
-				}
-			}
-
-		}
-		waitGrp.Done()
-	}()
-
-	waitGrp.Wait()
+	serve(waitCtx)
 	log.Printf("main exit")
-	_ = cancel
+	cancel()
+}
+
+// send request not wait response
+// use this for bypass some http proxy auth
+// url.HostName()+ net.DefaultPort()
+//https://github.com/golang/go/issues/16142
+func httpWrite(ctx context.Context, addr string, req *http.Request) error {
+	req.Header.Set("User-Agent", sshttp.DefaultUserAgent)
+	d := net.Dialer{}
+	conn, err := d.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return err
+	}
+	err = req.Write(conn)
+	_ = conn.Close()
+	return err
 }
