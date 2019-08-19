@@ -4,15 +4,13 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/fooofei/sshttp"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"sync"
-	"time"
-
-	"github.com/fooofei/sshttp"
 )
 
 func usage(program string) string {
@@ -62,9 +60,33 @@ pipeLoop:
 	}
 }
 
+func bypassProxy(t *sshttp.Tunnel) {
+	var err error
+	var req *http.Request
+
+	log.Printf("enter login")
+	req, err = sshttp.NewLogin()
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = req.WriteProxy(t.W)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("leave login")
+
+	log.Printf("enter Read login")
+	req, err = http.ReadRequest(t.R)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("leave Read login")
+}
+
 func pipeConn(ctx context.Context, app io.ReadWriter, tun io.ReadWriteCloser,
 	sshdAddr string) {
-
+	var req *http.Request
+	var err error
 	t := &sshttp.Tunnel{
 		SndNxt:        0,
 		SndUna:        0,
@@ -76,14 +98,7 @@ func pipeConn(ctx context.Context, app io.ReadWriter, tun io.ReadWriteCloser,
 		CopyBuf:       make([]byte, 128*1024),
 	}
 
-	req, err := sshttp.NewLogin()
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = req.Write(t.W)
-	if err != nil {
-		log.Fatal(err)
-	}
+	bypassProxy(t)
 	req, err = sshttp.NewProxyConnect(sshdAddr)
 	if err != nil {
 		log.Fatal(err)
@@ -128,7 +143,7 @@ func serve(ctx context.Context) {
 
 	log.Printf("proxy %v sshdAddr %v", addr, sshdAddr)
 
-	dialCtx, _ := context.WithTimeout(ctx, time.Second*300)
+	dialCtx, _ := context.WithCancel(ctx)
 	d := net.Dialer{}
 	tunConn, err := d.DialContext(dialCtx, "tcp", addr)
 	if err != nil {
@@ -159,6 +174,7 @@ func main() {
 //https://github.com/golang/go/issues/16142
 func httpWrite(ctx context.Context, addr string, req *http.Request) error {
 	req.Header.Set("User-Agent", sshttp.DefaultUserAgent)
+	req.Header.Set("Proxy-Connection", "keep-alive")
 	d := net.Dialer{}
 	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {

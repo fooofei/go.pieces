@@ -64,6 +64,7 @@ func NewRequest(reqType string, seq int64, ack int64, body io.Reader) (*http.Req
 		return nil, err
 	}
 	r.Header.Set("User-Agent", DefaultUserAgent)
+	r.Header.Set("Proxy-Connection", "keep-alive")
 	return r, err
 }
 

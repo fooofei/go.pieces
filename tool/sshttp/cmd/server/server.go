@@ -111,6 +111,16 @@ func serve(ctx context.Context, conn net.Conn) error {
 	}
 	log.Printf("first Response = %v", httpPath)
 
+	if httpPath.Type != "login" {
+		return errors.Wrapf(err, "httpPath.Type %v != login", httpPath)
+	}
+	// send hello back
+	req, err = sshttp.NewLogin()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	err = req.Write(t.W)
+	
 	req, err = http.ReadRequest(t.R)
 	if err != nil {
 		return errors.Wrapf(err, "fail read second http.ReadRequest")
