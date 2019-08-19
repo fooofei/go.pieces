@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"github.com/pkg/errors"
 	"io"
 	"log"
@@ -48,6 +49,38 @@ pipeLoop:
 	}
 }
 
+func pipeConn(app io.ReadWriteCloser, tun *sshttp.Tunnel) {
+	closeBoth := func() {
+		_ = app.Close()
+		_ = tun.Close()
+	}
+	once := &sync.Once{}
+	waitGrpBoth := &sync.WaitGroup{}
+	closeCtx, cancel := context.WithCancel(tun.Ctx)
+	waitGrpBoth.Add(1)
+	go func() {
+		pipeConnReadApp(app, tun)
+		waitGrpBoth.Done()
+		once.Do(closeBoth)
+	}()
+
+	waitGrpBoth.Add(1)
+	go func() {
+		pipeConnReadTun(app, tun)
+		waitGrpBoth.Done()
+		once.Do(closeBoth)
+	}()
+
+	go func() {
+		select {
+		case <-closeCtx.Done():
+			once.Do(closeBoth)
+		}
+	}()
+	waitGrpBoth.Wait()
+	cancel()
+}
+
 func serve(ctx context.Context, conn net.Conn) error {
 	t := &sshttp.Tunnel{
 		SndNxt:        0,
@@ -55,6 +88,7 @@ func serve(ctx context.Context, conn net.Conn) error {
 		RcvNxt:        0,
 		W:             conn,
 		R:             bufio.NewReader(conn),
+		C:             conn,
 		Ctx:           ctx,
 		AckedSndNxtCh: make(chan int64, 1000),
 		CopyBuf:       make([]byte, 128*1024),
@@ -63,6 +97,9 @@ func serve(ctx context.Context, conn net.Conn) error {
 	var req *http.Request
 	var err error
 	var httpPath *sshttp.HttpPath
+
+	closeTunNoWait, _ := takeOverCloser(ctx, conn)
+	defer close(closeTunNoWait)
 
 	req, err = http.ReadRequest(t.R)
 	if err != nil {
@@ -95,36 +132,7 @@ func serve(ctx context.Context, conn net.Conn) error {
 	if err != nil {
 		return errors.Wrapf(err, "fail Dial")
 	}
-
-	closeOnceFunc := func() {
-		_ = app.Close()
-		_ = conn.Close()
-	}
-	closeOnce := &sync.Once{}
-	waitGrp := &sync.WaitGroup{}
-	closeCtx, cancel := context.WithCancel(ctx)
-	waitGrp.Add(1)
-	go func() {
-		pipeConnReadApp(app, t)
-		waitGrp.Done()
-		closeOnce.Do(closeOnceFunc)
-	}()
-	
-	waitGrp.Add(1)
-	go func() {
-		pipeConnReadTun(app, t)
-		waitGrp.Done()
-		closeOnce.Do(closeOnceFunc)
-	}()
-
-	go func() {
-		select {
-		case <-closeCtx.Done():
-			closeOnce.Do(closeOnceFunc)
-		}
-	}()
-	waitGrp.Wait()
-	cancel()
+	pipeConn(app, t)
 	log.Printf("leave serve")
 	return nil
 }
@@ -147,49 +155,69 @@ func setupSignal(waitCtx context.Context, waitGrp *sync.WaitGroup, cancel contex
 	}()
 }
 
+func takeOverCloser(waitCtx context.Context, closer io.Closer) (chan bool, *sync.WaitGroup) {
+
+	noWait := make(chan bool, 1)
+	waitGrp := &sync.WaitGroup{}
+	waitGrp.Add(1)
+	go func() {
+		select {
+		case <-noWait:
+		case <-waitCtx.Done():
+		}
+		_ = closer.Close()
+		waitGrp.Done()
+	}()
+	return noWait, waitGrp
+}
+
 func main() {
 	var err error
-	var waitCtx context.Context
+	var ctx context.Context
 	var cancel context.CancelFunc
 
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
+	log.SetPrefix(fmt.Sprintf("pid =%v ", os.Getpid()))
 
 	addr := ":3389"
-	waitCtx, cancel = context.WithCancel(context.Background())
+	ctx, cancel = context.WithCancel(context.Background())
 	waitGrp := &sync.WaitGroup{}
 
-	setupSignal(waitCtx, waitGrp, cancel)
+	setupSignal(ctx, waitGrp, cancel)
 	lc := &net.ListenConfig{}
-	conn, err := lc.Listen(waitCtx, "tcp", addr)
+	conn, err := lc.Listen(ctx, "tcp", addr)
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	log.Printf("serve at %v", addr)
+	closerNoWait, closerWaitGrp := takeOverCloser(ctx, conn)
 acceptLoop:
 	for {
-		conn, err := conn.Accept()
+		subconn, err := conn.Accept()
 		if err != nil {
 			log.Printf("err= %v", err)
 			select {
-			case <-waitCtx.Done():
+			case <-ctx.Done():
 				break acceptLoop
 			default:
 			}
 			continue
 		}
-		log.Printf("Accept from %v", conn.RemoteAddr())
+		log.Printf("Accept from %v", subconn.RemoteAddr())
 		waitGrp.Add(1)
-		go func(conn net.Conn) {
-			err = serve(waitCtx, conn)
+		go func(ctx context.Context, conn net.Conn) {
+			err = serve(ctx, conn)
 			if err != nil {
 				_ = conn.Close()
 				log.Printf("serve err= %v", err)
 			}
 			waitGrp.Done()
-		}(conn)
+		}(ctx, subconn)
 
 	}
+
 	waitGrp.Wait()
-	_ = conn.Close()
+	close(closerNoWait)
+	closerWaitGrp.Wait()
 	log.Printf("main exit")
 }

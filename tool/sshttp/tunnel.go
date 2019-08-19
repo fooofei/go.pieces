@@ -18,6 +18,7 @@ type Tunnel struct {
 	RcvNxt        int64
 	W             io.Writer
 	R             *bufio.Reader
+	C             io.Closer
 	Ctx           context.Context
 	AckedSndNxtCh chan int64
 	CopyBuf       []byte // 128*1024 buffer
@@ -94,4 +95,8 @@ func (t *Tunnel) WriteTo(w io.Writer) (int64, error) {
 	}
 
 	return 0, nil
+}
+
+func (t *Tunnel) Close() error {
+	return t.C.Close()
 }

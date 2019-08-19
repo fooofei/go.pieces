@@ -58,8 +58,8 @@ func NewDataRequest(seq int64, ack int64, body []byte) (*http.Request, error) {
 }
 
 func NewRequest(reqType string, seq int64, ack int64, body io.Reader) (*http.Request, error) {
-	url := fmt.Sprintf("/%v/%v/%v", reqType, seq, ack)
-	r, err := http.NewRequest("POST", url, body)
+	url1 := fmt.Sprintf("/%v/%v/%v", reqType, seq, ack)
+	r, err := http.NewRequest("POST", url1, body)
 	if err != nil {
 		return nil, err
 	}
