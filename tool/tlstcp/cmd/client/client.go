@@ -25,6 +25,8 @@ func main() {
 	// 从 client 角度，限定使用的加密套件
 	// 看我们能否使用 wireshark 成功解密
 	// 效果：成功了
+	// 当用 xx_RSA_xx 系列的加密套件才能使用 wireshark 解密
+	// xx_ECDHE_xxx 系列的加密套件就不能使用 wireshark 解密了
 	tc.CipherSuites= []uint16{
 		tls.TLS_RSA_WITH_AES_128_CBC_SHA,
 	}
