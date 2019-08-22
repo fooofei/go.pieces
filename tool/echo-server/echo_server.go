@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	rlimt "echo_server/rlimit"
 	"flag"
 	"fmt"
@@ -24,6 +25,7 @@ type echoContext struct {
 	Wg        *sync.WaitGroup
 	StatDur   time.Duration
 	StartTime time.Time
+	TlsCfg    *tls.Config
 	//
 	AddCnn int64
 	SubCnn int64
@@ -82,18 +84,18 @@ func takeOverCnnClose(waitCtx context.Context, cnn io.Closer) (chan bool, *sync.
 	return noWait, waitGrp
 }
 
-func echoConn(echoCtx *echoContext, cnn net.Conn) {
+func echoConn(echoCtx *echoContext, rwc io.ReadWriteCloser) {
 
 	atomic.AddInt64(&echoCtx.AddCnn, 1)
-	noWait, waitGrp := takeOverCnnClose(echoCtx.WaitCtx, cnn)
+	noWait, waitGrp := takeOverCnnClose(echoCtx.WaitCtx, rwc)
 
 	//copy until EOF
 	buf := make([]byte, 128*1024)
 	for {
-		nr, er := cnn.Read(buf)
+		nr, er := rwc.Read(buf)
 		if nr > 0 {
 			atomic.AddInt64(&echoCtx.RxSize, int64(nr))
-			nw, ew := cnn.Write(buf[:nr])
+			nw, ew := rwc.Write(buf[:nr])
 			if nw > 0 {
 				atomic.AddInt64(&echoCtx.TxSize, int64(nw))
 			}
@@ -112,9 +114,13 @@ func echoConn(echoCtx *echoContext, cnn net.Conn) {
 }
 
 func listenAndServe(echoCtx *echoContext) {
-	cnn, err := net.Listen("tcp", echoCtx.LAddr)
+	lc := net.ListenConfig{}
+	cnn, err := lc.Listen(echoCtx.WaitCtx, "tcp", echoCtx.LAddr)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if echoCtx.TlsCfg != nil {
+		cnn = tls.NewListener(cnn, echoCtx.TlsCfg)
 	}
 	// a routine to wake up accept()
 	noWait, waitGrp := takeOverCnnClose(echoCtx.WaitCtx, cnn)
@@ -160,12 +166,24 @@ func main() {
 	echoCtx.Wg = new(sync.WaitGroup)
 	echoCtx.StatDur = time.Second * 5
 	echoCtx.StartTime = time.Now()
+	certPath := ""
+	privKeyPath := ""
 
 	flag.StringVar(&echoCtx.LAddr, "laddr", ":3389", "The local listen addr")
+	flag.StringVar(&certPath, "cert", "", "The cert file, PEM format, null will not use tls")
+	flag.StringVar(&privKeyPath, "privkey", "", "The privkey file, PEM format, null will not use tls")
 	flag.Parse()
 	rlimt.BreakOpenFilesLimit()
 	log.Printf("working on \"%v\"", echoCtx.LAddr)
 	setupSignal(echoCtx, cancel)
+	if certPath != "" && privKeyPath != "" {
+		tlsCert, err := tls.LoadX509KeyPair(certPath, privKeyPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		echoCtx.TlsCfg = &tls.Config{}
+		echoCtx.TlsCfg.Certificates = []tls.Certificate{tlsCert}
+	}
 
 	// stat
 	echoCtx.Wg.Add(1)
