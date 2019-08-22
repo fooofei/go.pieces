@@ -25,9 +25,9 @@ func main() {
 	// 从 client 角度，限定使用的加密套件
 	// 看我们能否使用 wireshark 成功解密
 	// 效果：成功了
-	//tc.CipherSuites= []uint16{
-	//	tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-	//}
+	tc.CipherSuites= []uint16{
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+	}
 	tlsCnn := tls.Client(conn, tc)
 	err = tlsCnn.Handshake()
 	if err != nil {
