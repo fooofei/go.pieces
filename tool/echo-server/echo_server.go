@@ -183,6 +183,9 @@ func main() {
 		}
 		echoCtx.TlsCfg = &tls.Config{}
 		echoCtx.TlsCfg.Certificates = []tls.Certificate{tlsCert}
+		//echoCtx.TlsCfg.CipherSuites = []uint16 {
+		//	tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+		//}
 	}
 
 	// stat
