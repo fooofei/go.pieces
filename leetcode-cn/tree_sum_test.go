@@ -59,7 +59,6 @@ func threeSum(nums []int) [][]int {
 	sort.Ints(nums)
 	result := make([][]int, 0, 20000)
 	zeroIdx := sort.SearchInts(nums, 0)
-	uniq := make(map[string]bool)
 
 	for i := 0; i < len(nums)-2 && nums[i] <= 0; i++ {
 
@@ -88,30 +87,22 @@ func threeSum(nums []int) [][]int {
 		}
 
 		for left < right {
-			// 这里难度好大
-			// 怎么加都不对
-			//if right-left > 1 && nums[left] == nums[left+1] && nums[right] == nums[right-1] {
-			//	right-- // not left ++
-			//	continue
-			//}
 			sum := v1 + nums[left] + nums[right]
 			if sum > 0 {
 				right--
 			} else if sum < 0 {
 				left++
+			} else if right-left > 1 && nums[left] == nums[left+1] && nums[right] == nums[right-1] {
+				right-- // 比 left++ 更好，
+				continue
 			} else {
-				s := fmt.Sprintf("%v,%v,%v", v1, nums[left], nums[right])
-				if _, exists := uniq[s]; !exists {
-					result = append(result, []int{v1, nums[left], nums[right]})
-					uniq[s] = true
-				}
+				result = append(result, []int{v1, nums[left], nums[right]})
 				right--
 				left++
 			}
 		}
 	}
 	return result
-
 }
 
 func TestThreeSum(t *testing.T) {
