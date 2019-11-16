@@ -10,6 +10,13 @@ import (
 	//is "gotest.tools/assert/cmp"
 )
 
+func assertEqualInts(t *testing.T, a []int, b []int) {
+	assert.Equal(t, len(a), len(b))
+	for i := 0; i < len(a); i++ {
+		assert.Equal(t, a[i], b[i])
+	}
+}
+
 func TestIntPointer(t *testing.T) {
 	var a [2]int
 	var p *int
@@ -250,4 +257,15 @@ func TestCopySliceBad(t *testing.T) {
 	assert.Equal(t, r, 0)
 	assert.Equal(t, IntArray(a).Details(), "{}")
 	assert.Equal(t, IntArray(a).Breif(), "cap=4 len=0")
+}
+
+func TestInplaceChange(t *testing.T) {
+	a := []int{1, 2}
+	// 在迭代的时候修改容器是合法的，不会出现死循环
+	for i := range a {
+		if i%2 == 0 {
+			a = append(a, i+20)
+		}
+	}
+	assertEqualInts(t, a, []int{1, 2, 20})
 }
