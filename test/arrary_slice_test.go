@@ -269,3 +269,12 @@ func TestInplaceChange(t *testing.T) {
 	}
 	assertEqualInts(t, a, []int{1, 2, 20})
 }
+
+func TestAppendOverwriteSource(t *testing.T) {
+	nums1 := []int{4, 5}
+	nums2 := []int{9}
+	// WARNING: append will overwrite nums1
+	ret := append(nums1[0:0], nums2...)
+	assertEqualInts(t, ret, []int{9})
+	assertEqualInts(t, nums1, []int{9, 5})
+}
