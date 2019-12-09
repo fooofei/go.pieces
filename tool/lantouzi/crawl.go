@@ -189,6 +189,9 @@ func crawPosts(ctx context.Context, postWebs chan string, posts chan *moneyPost,
 	collectorWithContext(c, ctx)
 	collectorRetryOnError(c, ctx)
 
+	re := make([]*regexp.Regexp, 0, 4)
+	re = append(re, regexp.MustCompile(Pattern1))
+	re = append(re, regexp.MustCompile(Pattern2))
 	// 目标是搜索多个 p[class=MsoNormal] 拼接起来，也可以是搜索 posts rich-text
 	c.OnHTML("div[class=\"posts rich-text\"]", func(e *colly.HTMLElement) {
 		if len(e.Text) < 1 {
@@ -198,9 +201,6 @@ func crawPosts(ctx context.Context, postWebs chan string, posts chan *moneyPost,
 			return
 		}
 		atomic.AddInt64(&stat.PostRespValidCount, 1)
-		re := make([]*regexp.Regexp, 0, 4)
-		re = append(re, regexp.MustCompile(Pattern1))
-		re = append(re, regexp.MustCompile(Pattern2))
 		for _, r := range re {
 			// A Regexp is safe for concurrent use by multiple goroutines,
 			// except for configuration methods, such as Longest.
@@ -210,9 +210,7 @@ func crawPosts(ctx context.Context, postWebs chan string, posts chan *moneyPost,
 				posts <- v
 				break
 			}
-
 		}
-
 	})
 websLoop:
 	for {
