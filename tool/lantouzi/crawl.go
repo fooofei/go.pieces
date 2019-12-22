@@ -60,9 +60,7 @@ func newMoneyPost(year, month, day, count, money string) *moneyPost {
 
 func (m *moneyPost) ToRecord() []string {
 	r := make([]string, 0, 5)
-	r = append(r, m.Year)
-	r = append(r, m.Month)
-	r = append(r, m.Day)
+	r = append(r, fmt.Sprintf("%v-%v-%v", m.Year, m.Month, m.Day))
 	r = append(r, m.Count)
 	r = append(r, m.Money)
 	return r
@@ -171,7 +169,7 @@ func crawlPage(ctx context.Context, postWebs chan string, stat *Stat) {
 	})
 
 	log.Printf("page start enqueue requests")
-	for i := 1; i < 1000; i++ {
+	for i := 1; i < 4; i++ {
 		url := fmt.Sprintf("https://lantouzi.com/post?page=%v", i)
 		err := c.Visit(url)
 		atomic.AddInt64(&stat.PageReqCount, 1)
@@ -303,7 +301,9 @@ func timeKey(t time.Time) string {
 
 func writePosts(ctx context.Context, posts chan *moneyPost, stat *Stat) {
 	path := "lantouzi-back.csv"
-	endDay := beginDay(2019, 12, 8)
+	curTime := time.Now()
+	curTime = curTime.Add(-time.Hour * 24)
+	endDay := beginDay(curTime.Year(), int(curTime.Month()), int(curTime.Day()))
 	fw, _ := os.Create(path)
 	w := csv.NewWriter(fw)
 	cache := make(map[string]*moneyPost, 0)
