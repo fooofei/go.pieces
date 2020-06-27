@@ -29,6 +29,7 @@ func TestNetconnCmpNil(t *testing.T) {
 	tlsCfg := &tls.Config{InsecureSkipVerify: true}
 	// no need setup server
 	tlsAddr := "127.0.0.1:8899"
+	// 访问不存在的地址，制造一个 err
 	tlsCnn, err := tls.DialWithDialer(d, "tcp", tlsAddr, tlsCfg)
 	t.Logf("dial tls err= %v", err)
 
