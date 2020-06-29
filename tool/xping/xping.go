@@ -43,6 +43,8 @@ type PingOp interface {
 	//     @time.Duration take time in time.Duration
 	//     @error indicates this ping success or fail
 	Ping(waitCtx context.Context, addr string) (time.Duration, error)
+
+	Close() error
 }
 
 func setupSignal(waitCtx context.Context, waitGrp *sync.WaitGroup, cancel context.CancelFunc) {
@@ -119,11 +121,11 @@ pingLoop:
 		//}
 
 	}
+	_ = po.Close()
 }
 
 // Ping the entrance
 func Ping(po PingOp) {
-
 	var cancel context.CancelFunc
 	var infinite bool
 	var W int64

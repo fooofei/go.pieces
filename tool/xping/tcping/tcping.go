@@ -31,6 +31,10 @@ func (t *tcpingOp) Name() string {
 	return "TCPing"
 }
 
+func (t *tcpingOp) Close() error {
+	return nil
+}
+
 func main() {
 	op := new(tcpingOp)
 	xping.Ping(op)

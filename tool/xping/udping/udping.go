@@ -34,6 +34,7 @@ func (t *udpingOp) Ping(waitCtx context.Context, raddr string) (time.Duration, e
 	_ = t.Cnn.SetReadDeadline(noDeadline)
 	return time.Now().Sub(start), err
 }
+
 func (t *udpingOp) Ready(raddr string) error {
 	var err error
 	t.Cnn, err = net.Dial("udp", raddr)
@@ -45,11 +46,21 @@ func (t *udpingOp) Ready(raddr string) error {
 	_ = err
 	return nil
 }
+
 func (t *udpingOp) Name() string {
 	return "UDPing"
 }
+
+func (t *udpingOp) Close() error {
+	var err error
+	if t.Cnn != nil {
+		err = t.Cnn.Close()
+		t.Cnn = nil
+	}
+	return err
+}
+
 func main() {
 	op := new(udpingOp)
 	xping.Ping(op)
-	_ = op.Cnn.Close()
 }
