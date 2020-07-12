@@ -1,4 +1,7 @@
 // 演示在 Golang 中如何使用 syslog
+
+// +build !windows
+
 package go_pieces
 
 import (

@@ -11,8 +11,7 @@ import (
 )
 
 // blog https://www.calhoun.io/when-nil-isnt-equal-to-nil/
-func TestNetconnCmpNil(t *testing.T) {
-
+func TestNetConnCmpNil(t *testing.T) {
 	var cnn io.ReadWriteCloser = nil
 	var nilInterface interface{}
 
@@ -61,4 +60,18 @@ func TestNetconnCmpNil(t *testing.T) {
 	if tc, is := cnn.(*tls.Conn); is && tc != nil {
 		_ = tc.Close()
 	}
+}
+
+type CustomStruct struct {
+}
+
+func returnCustomStructPointer() interface{} {
+	var nullPointer *CustomStruct
+	return nullPointer
+}
+
+func TestCustomStructCmpNil(t *testing.T) {
+	nullPointer := returnCustomStructPointer()
+	assert.Equal(t, nullPointer == nil, false)
+	assert.Equal(t, nullPointer, (*CustomStruct)(nil))
 }
