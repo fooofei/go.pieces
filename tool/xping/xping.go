@@ -80,8 +80,9 @@ pingLoop:
 		bb.Reset()
 		start := time.Now()
 
-		pingOpWaitCtx, _ := context.WithTimeout(wkCtx.WaitCtx, wkCtx.W)
+		pingOpWaitCtx, cancel := context.WithTimeout(wkCtx.WaitCtx, wkCtx.W)
 		dur, err = po.Ping(pingOpWaitCtx, wkCtx.RAddr)
+		cancel()
 		durNanoSec := dur.Nanoseconds()
 		durMillSec := float64(durNanoSec) / 1000 / 1000
 
