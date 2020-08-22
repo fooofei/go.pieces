@@ -20,7 +20,6 @@ func doingWork(t *testing.T, loopCnt int) {
 }
 
 func TestNoDelayedDefer(t *testing.T) {
-
 	for i := 0; i < 100; i += 1 {
 		doingWork(t, i)
 	}

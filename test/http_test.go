@@ -1,4 +1,4 @@
-package main
+package go_pieces
 
 import (
 	"context"
@@ -35,8 +35,8 @@ func setupServer(ctx context.Context) error {
 	server := &http.Server{
 		Addr:    metricAddr,
 		Handler: mux,
-    // baseCtx 的作用不是关闭 accept，不是关闭正在建立的连接
-    // 要 关闭连接还是要用 shutdown
+		// baseCtx 的作用不是关闭 accept，不是关闭正在建立的连接
+		// 要 关闭连接还是要用 shutdown
 	}
 	serverClosedCh := make(chan error, 1)
 	go func() {
@@ -55,7 +55,7 @@ func setupServer(ctx context.Context) error {
 	return err
 }
 
-func main() {
+func ExampleHTTPServer() {
 	ctx, cancel := context.WithCancel(context.Background())
 	logger = stdr.New(stdlog.New(os.Stdout, "", stdlog.Lshortfile|stdlog.LstdFlags))
 	logger = logger.WithValues("pid", os.Getpid())
