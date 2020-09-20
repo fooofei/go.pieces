@@ -1,3 +1,5 @@
+// +build !windows
+
 package main
 
 import (
@@ -6,12 +8,6 @@ import (
 	"net"
 	"time"
 )
-
-func assertErrNil(prefix string, err error) {
-	if err != nil {
-		log.Fatalf("%v err= %v", prefix, err)
-	}
-}
 
 func dialRoutine(addr string, wait chan bool) {
 
