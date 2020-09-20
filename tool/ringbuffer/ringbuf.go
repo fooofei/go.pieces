@@ -75,3 +75,7 @@ func (r *Ringbuf) Size() int {
 func (r *Ringbuf) Cap() int {
 	return len(r.buf)
 }
+
+func main() {
+
+}
