@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/fooofei/xping"
+	"github.com/fooofei/ping/pkg/pinger"
 )
 
 type httpingOp struct {
@@ -13,11 +13,10 @@ type httpingOp struct {
 }
 
 func (t *httpingOp) Ping(waitCtx context.Context, raddr string) (time.Duration, error) {
-	req, err := http.NewRequest("GET", raddr, nil)
+	req, err := http.NewRequestWithContext(waitCtx, http.MethodGet, raddr, nil)
 	if err != nil {
 		return time.Duration(0), err
 	}
-	req = req.WithContext(waitCtx)
 	start := time.Now()
 	resp, err := t.Clt.Do(req)
 	dur := time.Now().Sub(start)
@@ -28,7 +27,7 @@ func (t *httpingOp) Ping(waitCtx context.Context, raddr string) (time.Duration, 
 	return dur, nil
 }
 
-func (t *httpingOp) Ready(raddr string) error {
+func (t *httpingOp) Ready(ctx context.Context, raddr string) error {
 	t.Clt = http.DefaultClient
 	return nil
 }
@@ -43,5 +42,5 @@ func (t *httpingOp) Close() error {
 
 func main() {
 	p := new(httpingOp)
-	xping.Ping(p)
+	pinger.DoPing(p)
 }

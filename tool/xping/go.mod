@@ -1,4 +1,4 @@
-module github.com/fooofei/xping
+module github.com/fooofei/ping
 
 go 1.15
 

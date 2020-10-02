@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/fooofei/xping"
+	"github.com/fooofei/ping/pkg/pinger"
 )
 
 type tcpingOp struct {
@@ -22,8 +22,8 @@ func (t *tcpingOp) Ping(waitCtx context.Context, raddr string) (time.Duration, e
 	_ = cnn.Close()
 	return dur, nil
 }
-func (t *tcpingOp) Ready(raddr string) error {
-	t.Dialer = new(net.Dialer)
+func (t *tcpingOp) Ready(ctx context.Context, raddr string) error {
+	t.Dialer = &net.Dialer{}
 	return nil
 }
 
@@ -37,5 +37,5 @@ func (t *tcpingOp) Close() error {
 
 func main() {
 	op := new(tcpingOp)
-	xping.Ping(op)
+	pinger.DoPing(op)
 }

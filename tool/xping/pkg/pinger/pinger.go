@@ -1,4 +1,4 @@
-package xping
+package pinger
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ import (
 	stats2 "github.com/montanaflynn/stats"
 )
 
-// The framework of xping
+// The framework of pingable
 
 // WorkContext defines work arg and work stats
 type WorkContext struct {
@@ -33,16 +33,16 @@ type WorkContext struct {
 	Durs     []time.Duration
 }
 
-// PingOp defines which pinger, httping or tcping or other
-type PingOp interface {
+// Pinger defines which pinger, httping or tcping or other
+type Pinger interface {
 	Name() string
-	// Before Ping, setup the global ready
-	Ready(addr string) error
+	// Before DoPing, setup the global ready
+	Ready(ctx context.Context, addr string) error
 	// The ping may contains several steps, only timing steps which we want
 	// return values
 	//     @time.Duration take time in time.Duration
 	//     @error indicates this ping success or fail
-	Ping(waitCtx context.Context, addr string) (time.Duration, error)
+	Ping(ctx context.Context, addr string) (time.Duration, error)
 
 	Close() error
 }
@@ -62,7 +62,7 @@ func setupSignal(waitCtx context.Context, waitGrp *sync.WaitGroup, cancel contex
 	}()
 }
 
-func doOp(wkCtx *WorkContext, po PingOp) {
+func doOp(wkCtx *WorkContext, po Pinger) {
 	bb := new(bytes.Buffer)
 	const TimeFmt = "15:04:05"
 	var count int64
@@ -70,9 +70,9 @@ func doOp(wkCtx *WorkContext, po PingOp) {
 	var dur time.Duration
 
 	ticker := time.Tick(time.Second)
-	err = po.Ready(wkCtx.RAddr)
+	err = po.Ready(wkCtx.WaitCtx, wkCtx.RAddr)
 	if err != nil {
-		log.Fatalf("fail Ready() error= %v", err)
+		log.Fatalf("failed Ready() error= <%T> %v", err, err)
 	}
 pingLoop:
 	for {
@@ -86,12 +86,12 @@ pingLoop:
 		durNanoSec := dur.Nanoseconds()
 		durMillSec := float64(durNanoSec) / 1000 / 1000
 
-		_, _ = fmt.Fprintf(bb, "> [%04v][%v] %v: %.2f ms",
+		_, _ = fmt.Fprintf(bb, "> [%05v][%v] %v: %.2f ms",
 			count, start.Format(TimeFmt), wkCtx.RAddr, durMillSec)
 		wkCtx.Sent += 1
 		wkCtx.Durs = append(wkCtx.Durs, dur)
 		if err != nil {
-			_, _ = fmt.Fprintf(bb, " err=%v", err)
+			_, _ = fmt.Fprintf(bb, " err=<%T> %v", err, err)
 		} else {
 			wkCtx.Received += 1
 		}
@@ -125,8 +125,8 @@ pingLoop:
 	_ = po.Close()
 }
 
-// Ping the entrance
-func Ping(po PingOp) {
+// DoPing the entrance of ping
+func DoPing(po Pinger) {
 	var cancel context.CancelFunc
 	var infinite bool
 	var W int64
@@ -134,13 +134,13 @@ func Ping(po PingOp) {
 	wkCtx.Wg = new(sync.WaitGroup)
 	wkCtx.WaitCtx, cancel = context.WithCancel(context.Background())
 
-	flag.BoolVar(&infinite, "t", false, "Ping until stopped with Ctrl+C")
+	flag.BoolVar(&infinite, "t", false, "DoPing until stopped with Ctrl+C")
 	flag.Int64Var(&wkCtx.N, "n", 4, "Number of requests to send")
 	flag.Int64Var(&W, "w", 1000, "Wait timeout (ms) between two requests >50")
 	flag.Parse()
 	args := flag.Args()
 	if len(args) < 1 {
-		fmt.Printf("Please give addr\n")
+		fmt.Printf("Please give addr for ping\n")
 		return
 	}
 	W -= 50
@@ -161,8 +161,8 @@ func Ping(po PingOp) {
 	doOp(wkCtx, po)
 	cancel()
 	wkCtx.Wg.Wait()
-	sm := summary(wkCtx.Sent, wkCtx.Received, wkCtx.Durs)
-	fmt.Printf(sm)
+	text := summary(wkCtx.Sent, wkCtx.Received, wkCtx.Durs)
+	fmt.Printf(text)
 }
 
 func summary(sent int64, received int64, durs []time.Duration) string {

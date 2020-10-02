@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/fooofei/xping"
+	"github.com/fooofei/ping/pkg/pinger"
 )
 
 type udpingOp struct {
@@ -35,14 +35,15 @@ func (t *udpingOp) Ping(waitCtx context.Context, raddr string) (time.Duration, e
 	return time.Now().Sub(start), err
 }
 
-func (t *udpingOp) Ready(raddr string) error {
+func (t *udpingOp) Ready(ctx context.Context, raddr string) error {
 	var err error
-	t.Cnn, err = net.Dial("udp", raddr)
+	d := &net.Dialer{}
+	t.Cnn, err = d.DialContext(ctx, "udp", raddr)
 	if err != nil {
 		return err
 	}
 	t.Buf = make([]byte, 100*1024)
-	t.Pld, err = hex.DecodeString("")
+	t.Pld, err = hex.DecodeString("hello")
 	_ = err
 	return nil
 }
@@ -62,5 +63,5 @@ func (t *udpingOp) Close() error {
 
 func main() {
 	op := new(udpingOp)
-	xping.Ping(op)
+	pinger.DoPing(op)
 }
