@@ -152,7 +152,7 @@ func DoPing(po Pinger) {
 	wkCtx.RAddr = args[0]
 	wkCtx.W = time.Millisecond * time.Duration(W)
 
-	fmt.Printf("=> %v %v for infinite= %v n= %v\n", po.Name(), wkCtx.RAddr, infinite, wkCtx.N)
+	fmt.Printf("=> %v %v for infinite=`%v` n=`%v`\n", po.Name(), wkCtx.RAddr, infinite, wkCtx.N)
 
 	setupSignal(wkCtx.WaitCtx, wkCtx.Wg, cancel)
 	if infinite {
