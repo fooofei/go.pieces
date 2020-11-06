@@ -6,6 +6,7 @@ import (
 	stdlog "log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -67,4 +68,19 @@ func ExampleHTTPServer() {
 	time.Sleep(time.Minute)
 	_ = cancel
 	_ = ctx
+}
+
+func ExampleHTTPWithProxy() {
+	proxy := func(_ *http.Request) (*url.URL, error) {
+		return url.Parse("http://127.0.0.1:3128")
+	}
+	transport := &http.Transport{Proxy: proxy}
+	_ = &http.Client{Transport: transport}
+}
+
+func ExampleHTTPDisableProxy() {
+	tr := &http.Transport{
+		Proxy: nil,
+	}
+	_ = &http.Client{Transport: tr}
 }
