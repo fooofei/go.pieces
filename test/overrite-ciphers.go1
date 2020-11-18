@@ -1,0 +1,49 @@
+package main
+
+import (
+	"crypto/tls"
+	_ "crypto/tls" // for auto init varDefaultCipherSuites
+	"strings"
+	_ "unsafe" // for use go:linkname
+)
+
+// 算法套件的定义在文件 crypto/tls/cipher_suites.go
+//这里有很多算法套件的 string 类型名字以及 int 类型的值
+//
+//http 默认使用的算法套件在
+//crypto/tls/common.go
+//defaultCipherSuites()
+//defaultCipherSuitesTLS13()
+
+// TLS1.2 及以下识别到了一些不安全的加密算法套件，TLS1.3 没有识别到不安全的加密算法套件
+// 对于识别出来的不安全的加密算法套件，go 默认还是在是使用的。
+// 这个文件的作用是对 go 默认使用的加密算法套件移除我们认为不安全的算法套件
+
+// 当我们有能力对 server 设置选项的时候，就可以抛弃这种 hook 方法了
+
+// 注意：不要使用 go build main.go 会导致这个文件不生效，要使用 go build 这个目录
+
+//go:linkname varDefaultCipherSuites crypto/tls.varDefaultCipherSuites
+var varDefaultCipherSuites []uint16
+
+//go:linkname defaultCipherSuites crypto/tls.defaultCipherSuites
+func defaultCipherSuites() []uint16
+
+func removeInsecureCipherSuites(suiteIds []uint16) []uint16 {
+	secureSuiteIds := make([]uint16, 0, len(suiteIds))
+	for _, suiteId := range suiteIds {
+		// 把识别到的 <=tls1.2 的不安全的算法套件加入到这里
+		// insecure TLS_RSA_WITH_3DES_EDE_CBC_SHA
+		name := tls.CipherSuiteName(suiteId)
+		if strings.Contains(name, "3DES") {
+			continue
+		}
+		secureSuiteIds = append(secureSuiteIds, suiteId)
+	}
+	return secureSuiteIds
+}
+
+func init() {
+	defaultCipherSuites()
+	varDefaultCipherSuites = removeInsecureCipherSuites(varDefaultCipherSuites)
+}
