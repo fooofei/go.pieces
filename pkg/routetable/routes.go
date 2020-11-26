@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"router/pkg/netaddr"
 	"syscall"
 	"unsafe"
+
+	"github.com/fooofei/go_pieces/pkg/netaddr"
 )
 
 type Route struct {
@@ -81,7 +82,7 @@ func (r *Route) String() string {
 
 func (r *Route) Digest() string {
 	return fmt.Sprintf("%v/%v %v %v/%v/%v",
-	r.Dest, r.Mask, r.NextHop, r.IfName, r.IfDesc, r.IfMacAddr)
+		r.Dest, r.Mask, r.NextHop, r.IfName, r.IfDesc, r.IfMacAddr)
 }
 
 // GetAdapterList return the Windows interfaces's adapter info
