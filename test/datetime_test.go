@@ -127,3 +127,12 @@ func TestTimestamp1(t *testing.T) {
 		fromTime2.Truncate(dur), fromTime2.Round(dur))
 
 }
+
+func TestTimestampFromString1(t *testing.T) {
+	s := "2020-12-14 10:44:04.650+0800"
+	const timeFmt = "2006-01-02 15:04:05.999999-0700"
+	timeValue, err := time.Parse(timeFmt, s)
+	assert.Equal(t, err == nil, true)
+	assert.Equal(t, timeValue.UTC().Format(time.RFC3339), "2020-12-14T02:44:04Z")
+	assert.Equal(t, timeValue.UnixNano(), int64(1607913844650000000))
+}
