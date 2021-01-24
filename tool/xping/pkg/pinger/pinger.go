@@ -21,11 +21,11 @@ import (
 // WorkContext defines work arg and work stats
 type WorkContext struct {
 	// from command line args
-	RAddr string
-	N     int64
-	W     time.Duration // timeout default 950ms
+	RAddr    string
+	N        int64
+	W        time.Duration // timeout default 950ms
+	Interval time.Duration
 	//
-	Wg      *sync.WaitGroup
 	WaitCtx context.Context
 	//
 	Sent     int64
@@ -47,19 +47,19 @@ type Pinger interface {
 	Close() error
 }
 
-func setupSignal(waitCtx context.Context, waitGrp *sync.WaitGroup, cancel context.CancelFunc) {
+func setupSignal(waitCtx context.Context) context.Context {
 	sigCh := make(chan os.Signal, 2)
 	signal.Notify(sigCh, os.Interrupt)
 	signal.Notify(sigCh, syscall.SIGTERM)
-	waitGrp.Add(1)
+	signalContext, cancel := context.WithCancel(waitCtx)
 	go func() {
 		select {
 		case <-waitCtx.Done():
 		case <-sigCh:
 			cancel()
 		}
-		waitGrp.Done()
 	}()
+	return signalContext
 }
 
 func doOp(wkCtx *WorkContext, po Pinger) {
@@ -69,7 +69,7 @@ func doOp(wkCtx *WorkContext, po Pinger) {
 	var err error
 	var dur time.Duration
 
-	ticker := time.Tick(time.Second)
+	ticker := time.Tick(wkCtx.Interval)
 	err = po.Ready(wkCtx.WaitCtx, wkCtx.RAddr)
 	if err != nil {
 		log.Fatalf("failed Ready() error= <%T> %v", err, err)
@@ -130,13 +130,16 @@ func DoPing(po Pinger) {
 	var cancel context.CancelFunc
 	var infinite bool
 	var W int64
+	var interval time.Duration
 	wkCtx := new(WorkContext)
-	wkCtx.Wg = new(sync.WaitGroup)
+	wg := new(sync.WaitGroup)
 	wkCtx.WaitCtx, cancel = context.WithCancel(context.Background())
+	defer cancel()
 
 	flag.BoolVar(&infinite, "t", false, "DoPing until stopped with Ctrl+C")
 	flag.Int64Var(&wkCtx.N, "n", 4, "Number of requests to send")
 	flag.Int64Var(&W, "w", 1000, "Wait timeout (ms) between two requests >50")
+	flag.DurationVar(&interval, "i", time.Second, "Interval between two ping")
 	flag.Parse()
 	args := flag.Args()
 	if len(args) < 1 {
@@ -151,16 +154,27 @@ func DoPing(po Pinger) {
 	log.Printf("args t=%v n=%v w=%v", infinite, wkCtx.N, W)
 	wkCtx.RAddr = args[0]
 	wkCtx.W = time.Millisecond * time.Duration(W)
+	wkCtx.Interval = interval
 
 	fmt.Printf("=> %v %v for infinite=`%v` n=`%v`\n", po.Name(), wkCtx.RAddr, infinite, wkCtx.N)
 
-	setupSignal(wkCtx.WaitCtx, wkCtx.Wg, cancel)
+	signalCtx := setupSignal(wkCtx.WaitCtx)
 	if infinite {
 		wkCtx.N = math.MaxInt64
 	}
-	doOp(wkCtx, po)
-	cancel()
-	wkCtx.Wg.Wait()
+	wg.Add(1)
+	go func() {
+		doOp(wkCtx, po)
+		wg.Done()
+		cancel()
+	}()
+	select {
+	case <-signalCtx.Done():
+		cancel()
+	case <-wkCtx.WaitCtx.Done():
+	}
+
+	wg.Wait()
 	text := summary(wkCtx.Sent, wkCtx.Received, wkCtx.Durs)
 	fmt.Printf(text)
 }
