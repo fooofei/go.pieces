@@ -5,24 +5,9 @@ package routetable
 import (
 	"syscall"
 	"unsafe"
-)
 
-type IpForwardRow struct {
-	ForwardDest      uint32
-	ForwardMask      uint32
-	ForwardPolicy    uint32
-	ForwardNextHop   uint32
-	ForwardIfIndex   uint32
-	ForwardType      uint32
-	ForwardProto     uint32
-	ForwardAge       uint32
-	ForwardNextHopAS uint32
-	ForwardMetric1   uint32
-	ForwardMetric2   uint32
-	ForwardMetric3   uint32
-	ForwardMetric4   uint32
-	ForwardMetric5   uint32
-}
+	"github.com/kbinani/win"
+)
 
 type SliceHeader struct {
 	Addr uintptr
@@ -53,6 +38,7 @@ type RouteTable struct {
 	getIpForwardTableProc    *syscall.Proc
 	createIpForwardEntryProc *syscall.Proc
 	deleteIpForwardEntryProc *syscall.Proc
+	setIpForwardEntryProc    *syscall.Proc
 }
 
 func NewRouteTable() (*RouteTable, error) {
@@ -73,12 +59,17 @@ func NewRouteTable() (*RouteTable, error) {
 	if err != nil {
 		return nil, err
 	}
+	setIpForwardEntry, err := dll.FindProc("SetIpForwardEntry")
+	if err != nil {
+		return nil, err
+	}
 
 	return &RouteTable{
 		dllHandle:                dll,
 		getIpForwardTableProc:    getIpForwardTable,
 		createIpForwardEntryProc: createIpForwardEntry,
 		deleteIpForwardEntryProc: deleteIpForwardEntry,
+		setIpForwardEntryProc:    setIpForwardEntry,
 	}, nil
 }
 
@@ -92,18 +83,18 @@ func (table *RouteTable) Close() error {
 //  MIB_IPFORWARDROW table[ANY_SIZE];
 //} MIB_IPFORWARDTABLE, *PMIB_IPFORWARDTABLE;
 
-func (table *RouteTable) Routes() ([]IpForwardRow, error) {
+func (table *RouteTable) Routes() ([]win.MIB_IPFORWARDROW, error) {
 	// 加4,是为了越过DWORD
 	mem := NewDynamicMemory(
 		uint32(
-			4 + unsafe.Sizeof(IpForwardRow{}),
+			4 + unsafe.Sizeof(win.MIB_IPFORWARDROW{}),
 		),
 	)
-	table_size := uint32(0)
+	tableSize := uint32(0)
 	// 获取路由表数量
 	_, r2, err := table.getIpForwardTableProc.Call(
 		mem.Address(),
-		uintptr(unsafe.Pointer(&table_size)),
+		uintptr(unsafe.Pointer(&tableSize)),
 		0,
 	)
 	// msdn https://msdn.microsoft.com/en-us/library/windows/desktop/aa365953(v=vs.85).aspx
@@ -112,10 +103,10 @@ func (table *RouteTable) Routes() ([]IpForwardRow, error) {
 	}
 
 	// 获取全部路由表
-	mem = NewDynamicMemory(table_size)
+	mem = NewDynamicMemory(tableSize)
 	_, r2, err = table.getIpForwardTableProc.Call(
 		mem.Address(),
-		uintptr(unsafe.Pointer(&table_size)),
+		uintptr(unsafe.Pointer(&tableSize)),
 		0,
 	)
 	if r2 != 0 {
@@ -124,7 +115,7 @@ func (table *RouteTable) Routes() ([]IpForwardRow, error) {
 
 	num := *(*uint32)(unsafe.Pointer(mem.Address()))
 
-	rows := []IpForwardRow{}
+	rows := []win.MIB_IPFORWARDROW{}
 	shRows := (*SliceHeader)(unsafe.Pointer(&rows))
 	shRows.Addr = mem.Address() + 4
 	shRows.Len = int(num)
@@ -133,7 +124,10 @@ func (table *RouteTable) Routes() ([]IpForwardRow, error) {
 }
 
 // 添加路由,需要管理员权限,才能添加成功
-func (table *RouteTable) Add(row* IpForwardRow) error {
+// IPHLPAPI_DLL_LINKAGE DWORD CreateIpForwardEntry(
+//  PMIB_IPFORWARDROW pRoute
+//);
+func (table *RouteTable) Add(row win.PMIB_IPFORWARDROW) error {
 	// https://msdn.microsoft.com/en-us/library/windows/desktop/aa365860(v=vs.85).aspx
 	// The function returns NO_ERROR (zero) if the function is successful.
 	r1, r2, err := table.createIpForwardEntryProc.Call(uintptr(unsafe.Pointer(row)))
@@ -146,7 +140,21 @@ func (table *RouteTable) Add(row* IpForwardRow) error {
 	return nil
 }
 
-func (table *RouteTable) Remove(row* IpForwardRow) error {
+// IPHLPAPI_DLL_LINKAGE DWORD SetIpForwardEntry(
+//  PMIB_IPFORWARDROW pRoute
+//);
+func (table *RouteTable) Set(row win.PMIB_IPFORWARDROW) error {
+	r1, r2, err := table.setIpForwardEntryProc.Call(uintptr(unsafe.Pointer(row)))
+	if r2 != 0 {
+		return err
+	}
+	if r1 != 0 {
+		return syscall.Errno(r1)
+	}
+	return nil
+}
+
+func (table *RouteTable) Remove(row *win.PMIB_IPFORWARDROW) error {
 	// The function returns NO_ERROR (zero) if the function is successful.
 	r1, r2, err := table.deleteIpForwardEntryProc.Call(uintptr(unsafe.Pointer(row)))
 	if r2 != 0 {

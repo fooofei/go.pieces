@@ -3,11 +3,15 @@ package netaddr
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"net"
 )
 
 func StringToNetwork(s string) (uint32, error) {
 	ip := net.ParseIP(s)
+	if ip == nil {
+		return 0, fmt.Errorf("failed parse ip, invalid '%s'", s)
+	}
 	return binary.LittleEndian.Uint32(ip.To4()), nil
 }
 
