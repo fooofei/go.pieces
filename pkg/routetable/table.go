@@ -154,7 +154,7 @@ func (table *RouteTable) Set(row win.PMIB_IPFORWARDROW) error {
 	return nil
 }
 
-func (table *RouteTable) Remove(row *win.PMIB_IPFORWARDROW) error {
+func (table *RouteTable) Remove(row win.PMIB_IPFORWARDROW) error {
 	// The function returns NO_ERROR (zero) if the function is successful.
 	r1, r2, err := table.deleteIpForwardEntryProc.Call(uintptr(unsafe.Pointer(row)))
 	if r2 != 0 {
