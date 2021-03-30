@@ -2,6 +2,7 @@ module github.com/fooofei/go_pieces
 
 require (
 	github.com/BurntSushi/toml v0.3.1 // indirect
+	github.com/araddon/dateparse v0.0.0-20210207001429-0eec95c9db7e
 	github.com/bifurcation/mint v0.0.0-20190129141059-83ba9bc2ead9 // indirect
 	github.com/dustin/go-coap v0.0.0-20190908170653-752e0f79981e
 	github.com/fooofei/stdr v0.2.0
@@ -22,6 +23,7 @@ require (
 	golang.org/x/text v0.3.3
 	golang.org/x/xerrors v0.0.0-20200806184451-1a77d5e9f316
 	gotest.tools v2.3.0+incompatible
+	gotest.tools/v3 v3.0.3
 )
 
 go 1.15

@@ -1,10 +1,10 @@
 package go_pieces
 
 import (
+	"github.com/araddon/dateparse"
+	"gotest.tools/v3/assert"
 	"testing"
 	"time"
-
-	"gotest.tools/assert"
 )
 
 const (
@@ -132,7 +132,13 @@ func TestTimestampFromString1(t *testing.T) {
 	s := "2020-12-14 10:44:04.650+0800"
 	const timeFmt = "2006-01-02 15:04:05.999999-0700"
 	timeValue, err := time.Parse(timeFmt, s)
-	assert.Equal(t, err == nil, true)
+	assert.NilError(t, err)
 	assert.Equal(t, timeValue.UTC().Format(time.RFC3339), "2020-12-14T02:44:04Z")
 	assert.Equal(t, timeValue.UnixNano(), int64(1607913844650000000))
+}
+
+func TestParseGMT(t *testing.T) {
+	dt, err := dateparse.ParseAny("2021-03-29T08:15:05.005GMT")
+	assert.NilError(t, err)
+	assert.Equal(t, dt.Format(time.RFC3339), "2021-03-29T08:15:05Z")
 }
