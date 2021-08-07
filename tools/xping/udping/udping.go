@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/fooofei/tools/ping/pkg/pinger"
+	"github.com/fooofei/go_pieces/tools/ping/pkg/pinger"
 )
 
 type udpingOp struct {

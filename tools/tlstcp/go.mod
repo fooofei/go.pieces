@@ -1,3 +1,3 @@
-module github.com/fooofei/tools/tlstcp
+module github.com/fooofei/go_pieces/tools/tlstcp
 
 go 1.16

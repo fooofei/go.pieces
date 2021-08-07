@@ -1,4 +1,4 @@
-module github.com/fooofei/tools/cltmsg
+module github.com/fooofei/go_pieces/tools/cltmsg
 
 go 1.16
 

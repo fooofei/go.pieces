@@ -1,4 +1,4 @@
-module github.com/fooofei/pkg
+module github.com/fooofei/go_pieces/pkg
 
 go 1.16
 

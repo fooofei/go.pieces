@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	fnet "github.com/fooofei/pkg/net"
+	fnet "github.com/fooofei/go_pieces/pkg/net"
 )
 
 // a golang port example from https://github.com/chenshuo/muduo/blob/master/examples/pingpong/client.cc

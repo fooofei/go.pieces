@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	fnet "github.com/fooofei/pkg/net"
+	fnet "github.com/fooofei/go_pieces/pkg/net"
 )
 
 type flowCtx struct {

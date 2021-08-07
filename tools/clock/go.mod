@@ -1,3 +1,3 @@
-module github.com/fooofei/tools/clock
+module github.com/fooofei/go_pieces/tools/clock
 
 go 1.16

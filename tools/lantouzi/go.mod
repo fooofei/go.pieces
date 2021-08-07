@@ -1,4 +1,4 @@
-module github.com/fooofei/tools/lantouzi
+module github.com/fooofei/go_pieces/tools/lantouzi
 
 go 1.13
 

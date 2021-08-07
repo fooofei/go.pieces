@@ -11,7 +11,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/fooofei/tools/sshttp"
+	"github.com/fooofei/go_pieces/tools/sshttp"
 )
 
 func usage(program string) string {

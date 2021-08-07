@@ -6,9 +6,9 @@ import (
 	"net"
 	"time"
 
-	netaddr "github.com/fooofei/pkg/net/addr"
-	"github.com/fooofei/pkg/routetable"
-	"github.com/fooofei/tools/ping/pkg/pinger"
+	netaddr "github.com/fooofei/go_pieces/pkg/net/addr"
+	"github.com/fooofei/go_pieces/pkg/routetable"
+	"github.com/fooofei/go_pieces/tools/ping/pkg/pinger"
 	"github.com/kbinani/win"
 )
 

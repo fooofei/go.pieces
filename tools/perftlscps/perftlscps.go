@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	fnet "github.com/fooofei/go_pieces/pkg/net"
 	"log"
 	"math"
 	"net"
@@ -17,10 +18,6 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-
-	"github.com/pkg/errors"
-
-	fnet "github.com/fooofei/pkg/net"
 )
 
 // globals
@@ -109,7 +106,7 @@ func boomTls(perfCtx *perfContext, cnn net.Conn) {
 	err := tlsCnn.Handshake()
 
 	if err != nil {
-		perfCtx.nonBlockEnqErr(errors.Wrapf(err, "fail tls handshake"))
+		perfCtx.nonBlockEnqErr(fmt.Errorf("fail tls handshake err: %w", err))
 		atomic.AddInt64(&perfCtx.stat.TLSCntFail, 1)
 	} else {
 		atomic.AddInt64(&perfCtx.stat.TLsCntOk, 1)

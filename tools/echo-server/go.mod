@@ -1,7 +1,7 @@
-module github.com/fooofei/tools/echo-server
+module github.com/fooofei/go_pieces/tools/echo-server
 
-replace github.com/fooofei/pkg => ../../pkg
+replace github.com/fooofei/go_pieces/pkg => ../../pkg
 
 go 1.16
 
-require github.com/fooofei/pkg v0.0.0-00010101000000-000000000000
+require github.com/fooofei/go_pieces/pkg v0.0.0-00010101000000-000000000000

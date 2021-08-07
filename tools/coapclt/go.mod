@@ -1,4 +1,4 @@
-module github.com/fooofei/tools/coapclt
+module github.com/fooofei/go_pieces/tools/coapclt
 
 go 1.16
 

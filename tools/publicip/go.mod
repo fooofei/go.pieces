@@ -1,3 +1,3 @@
-module github.com/fooofei/tools/publicip
+module github.com/fooofei/go_pieces/tools/publicip
 
 go 1.16

@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	netaddr "github.com/fooofei/pkg/net/addr"
+	netaddr "github.com/fooofei/go_pieces/pkg/net/addr"
 	"github.com/kbinani/win"
 )
 

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	rlimt "echo_server/rlimit"
 	"flag"
 	"fmt"
 	"io"
@@ -17,7 +16,9 @@ import (
 	"syscall"
 	"time"
 
-	fnet "github.com/fooofei/pkg/net"
+	"github.com/fooofei/go_pieces/tools/echo-server/rlimit"
+
+	fnet "github.com/fooofei/go_pieces/pkg/net"
 )
 
 // a golang port example from https://github.com/chenshuo/muduo/blob/master/examples/pingpong/
@@ -146,7 +147,7 @@ func main() {
 	flag.StringVar(&certPath, "cert", "", "The cert file, PEM format, null will not use tls")
 	flag.StringVar(&privKeyPath, "privkey", "", "The privkey file, PEM format, null will not use tls")
 	flag.Parse()
-	rlimt.BreakOpenFilesLimit()
+	rlimit.BreakOpenFilesLimit()
 	log.Printf("working on \"%v\"", echoCtx.LAddr)
 	if certPath != "" && privKeyPath != "" {
 		tlsCert, err := tls.LoadX509KeyPair(certPath, privKeyPath)

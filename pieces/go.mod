@@ -1,4 +1,4 @@
-module github.com/fooofei/pieces
+module github.com/fooofei/go_pieces/pieces
 
 require (
 	github.com/araddon/dateparse v0.0.0-20210207001429-0eec95c9db7e

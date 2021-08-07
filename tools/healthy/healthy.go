@@ -7,7 +7,7 @@ import (
 	"net"
 	"os"
 
-	fnet "github.com/fooofei/pkg/net"
+	fnet "github.com/fooofei/go_pieces/pkg/net"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 )

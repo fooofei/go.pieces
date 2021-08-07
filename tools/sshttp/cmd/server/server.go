@@ -13,8 +13,8 @@ import (
 	"sync"
 	"syscall"
 
-	fnet "github.com/fooofei/pkg/net"
-	"github.com/fooofei/tools/sshttp"
+	fnet "github.com/fooofei/go_pieces/pkg/net"
+	"github.com/fooofei/go_pieces/tools/sshttp"
 )
 
 func pipeConnReadApp(app io.Reader, tun *sshttp.Tunnel) {
