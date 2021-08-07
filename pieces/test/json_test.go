@@ -27,6 +27,7 @@ func TestMarshalNil(t *testing.T) {
 		t.Error(err)
 		return
 	}
+	// json 里没有写 level_2 那么这个成员就是 nil
 	assert.Equal(t, m.Level2 == nil, true)
 }
 
@@ -48,3 +49,9 @@ func TestMarshalEmpty(t *testing.T) {
 	assert.Equal(t, err != nil, true)
 	assert.Equal(t, m.Level2.Level2, "")
 }
+
+
+// 后续研究 如何保持 json 带注释
+// 后续研究 如何保持 json 序列化的输出与反序列化前一致
+
+// "github.com/buger/jsonparser" 可以保持原有的结构 进行针对性替换

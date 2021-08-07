@@ -9,6 +9,8 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	golang.org/x/text v0.3.3
 	golang.org/x/xerrors v0.0.0-20200806184451-1a77d5e9f316
+	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 	gotest.tools v2.3.0+incompatible
 	gotest.tools/v3 v3.0.3
 )
