@@ -5,7 +5,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
@@ -14,7 +13,11 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	fnet "github.com/fooofei/pkg/net"
 )
+
+// a golang port example from https://github.com/chenshuo/muduo/blob/master/examples/pingpong/client.cc
 
 type ppContext struct {
 	WaitCtx context.Context
@@ -43,7 +46,6 @@ func (ppCtx *ppContext) state() string {
 }
 
 func pingPong(ppCtx *ppContext, cnn net.Conn) {
-
 	b := make([]byte, 128*1024)
 	for {
 		nr, er := cnn.Read(b)
@@ -65,41 +67,7 @@ func pingPong(ppCtx *ppContext, cnn net.Conn) {
 	}
 }
 
-func setupSignal(ctx *ppContext, cancel context.CancelFunc) {
-
-	sigCh := make(chan os.Signal, 2)
-
-	signal.Notify(sigCh, os.Interrupt)
-	signal.Notify(sigCh, syscall.SIGTERM)
-
-	ctx.Wg.Add(1)
-	go func() {
-		select {
-		case <-sigCh:
-			cancel()
-		case <-ctx.WaitCtx.Done():
-		}
-		ctx.Wg.Done()
-	}()
-}
-
-func takeOverCnnClose(waitCtx context.Context, cnn io.Closer) (chan bool, *sync.WaitGroup) {
-	noWait := make(chan bool, 1)
-	waitGrp := &sync.WaitGroup{}
-	waitGrp.Add(1)
-	go func() {
-		select {
-		case <-noWait:
-		case <-waitCtx.Done():
-		}
-		_ = cnn.Close()
-		waitGrp.Done()
-	}()
-	return noWait, waitGrp
-}
-
 func main() {
-
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.SetPrefix(fmt.Sprintf("pid= %v ", os.Getpid()))
 
@@ -108,12 +76,11 @@ func main() {
 	var err error
 	var i int64
 	//
-	ppCtx.WaitCtx, cancel = context.WithCancel(context.Background())
+	ppCtx.WaitCtx, cancel = signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	ppCtx.Wg = new(sync.WaitGroup)
-	setupSignal(ppCtx, cancel)
 
-	flag.StringVar(&ppCtx.RAddr, "raddr", "127.0.0.1:3389", "TCP remote addr")
-	flag.Int64Var(&ppCtx.BlockSize, "blocksize", 1500, "TCP payloadsize")
+	flag.StringVar(&ppCtx.RAddr, "remote-addr", "127.0.0.1:3389", "TCP remote addr")
+	flag.Int64Var(&ppCtx.BlockSize, "block-size", 15000, "TCP payloadsize")
 	flag.Parse()
 
 	dia := &net.Dialer{}
@@ -122,7 +89,8 @@ func main() {
 		cancel()
 		log.Fatal(err)
 	}
-	noWait, waitGrp := takeOverCnnClose(ppCtx.WaitCtx, cnn)
+	waitCnnClose, cancelCnn := fnet.CloseWhenContext(ppCtx.WaitCtx, cnn)
+	defer cancelCnn()
 
 	// for start
 	bb := new(bytes.Buffer)
@@ -153,8 +121,8 @@ statLoop:
 			fmt.Printf("%v\n", ppCtx.state())
 		}
 	}
-	close(noWait)
-	waitGrp.Wait()
+	cancelCnn()
+	<-waitCnnClose.Done()
 	ppCtx.Wg.Wait()
 	log.Printf("main exit")
 }

@@ -1,4 +1,4 @@
-package netaddr
+package addr
 
 import (
 	"bytes"

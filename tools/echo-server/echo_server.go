@@ -16,7 +16,11 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	fnet "github.com/fooofei/pkg/net"
 )
+
+// a golang port example from https://github.com/chenshuo/muduo/blob/master/examples/pingpong/
 
 // echoContext defines the echo server context
 type echoContext struct {
@@ -51,43 +55,10 @@ func (echoCtx *echoContext) state() string {
 	return w.String()
 }
 
-func setupSignal(echoCtx *echoContext, cancel context.CancelFunc) {
-
-	sigCh := make(chan os.Signal, 2)
-
-	signal.Notify(sigCh, os.Interrupt)
-	signal.Notify(sigCh, syscall.SIGTERM)
-
-	echoCtx.Wg.Add(1)
-	go func() {
-		select {
-		case <-sigCh:
-			cancel()
-		case <-echoCtx.WaitCtx.Done():
-		}
-		echoCtx.Wg.Done()
-	}()
-}
-
-func takeOverCnnClose(waitCtx context.Context, cnn io.Closer) (chan bool, *sync.WaitGroup) {
-	noWait := make(chan bool, 1)
-	waitGrp := &sync.WaitGroup{}
-	waitGrp.Add(1)
-	go func() {
-		select {
-		case <-noWait:
-		case <-waitCtx.Done():
-		}
-		_ = cnn.Close()
-		waitGrp.Done()
-	}()
-	return noWait, waitGrp
-}
-
+// echoConn write the all received from src
 func echoConn(echoCtx *echoContext, rwc io.ReadWriteCloser) {
-
 	atomic.AddInt64(&echoCtx.AddCnn, 1)
-	noWait, waitGrp := takeOverCnnClose(echoCtx.WaitCtx, rwc)
+	waitCnnClose, closeCnn := fnet.CloseWhenContext(echoCtx.WaitCtx, rwc)
 
 	//copy until EOF
 	buf := make([]byte, 128*1024)
@@ -108,8 +79,8 @@ func echoConn(echoCtx *echoContext, rwc io.ReadWriteCloser) {
 			break
 		}
 	}
-	close(noWait)
-	waitGrp.Wait()
+	closeCnn()
+	<-waitCnnClose.Done()
 	atomic.AddInt64(&echoCtx.SubCnn, 1)
 }
 
@@ -123,7 +94,7 @@ func listenAndServe(echoCtx *echoContext) {
 		cnn = tls.NewListener(cnn, echoCtx.TlsCfg)
 	}
 	// a routine to wake up accept()
-	noWait, waitGrp := takeOverCnnClose(echoCtx.WaitCtx, cnn)
+	waitCnnClose, closeCnn := fnet.CloseWhenContext(echoCtx.WaitCtx, cnn)
 
 loop:
 	for {
@@ -139,9 +110,10 @@ loop:
 		}(echoCtx, cltCnn)
 
 	}
-	close(noWait)
-	waitGrp.Wait()
+	closeCnn()
+	<-waitCnnClose.Done()
 }
+
 func stat(echoCtx *echoContext) {
 	tick := time.NewTicker(echoCtx.StatDur)
 loop1:
@@ -162,7 +134,8 @@ func main() {
 
 	var cancel context.CancelFunc
 	echoCtx := new(echoContext)
-	echoCtx.WaitCtx, cancel = context.WithCancel(context.Background())
+	echoCtx.WaitCtx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 	echoCtx.Wg = new(sync.WaitGroup)
 	echoCtx.StatDur = time.Second * 5
 	echoCtx.StartTime = time.Now()
@@ -175,7 +148,6 @@ func main() {
 	flag.Parse()
 	rlimt.BreakOpenFilesLimit()
 	log.Printf("working on \"%v\"", echoCtx.LAddr)
-	setupSignal(echoCtx, cancel)
 	if certPath != "" && privKeyPath != "" {
 		tlsCert, err := tls.LoadX509KeyPair(certPath, privKeyPath)
 		if err != nil {
