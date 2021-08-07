@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/pkg/errors"
+	fnet "github.com/fooofei/pkg/net"
 )
 
 type flowCtx struct {
@@ -62,21 +62,6 @@ func (fc *flowCtx) nonBlockEnqErr(err error) {
 	}
 }
 
-func takeOverCnnClose(waitCtx context.Context, cnn io.Closer) (chan bool, *sync.WaitGroup) {
-	noWait := make(chan bool, 1)
-	waitGrp := &sync.WaitGroup{}
-	waitGrp.Add(1)
-	go func() {
-		select {
-		case <-noWait:
-		case <-waitCtx.Done():
-		}
-		_ = cnn.Close()
-		waitGrp.Done()
-	}()
-	return noWait, waitGrp
-}
-
 // recv stream bytes from tcp peer
 // convert it to msg
 // msg format is [uint32 + msgbytes]
@@ -117,13 +102,14 @@ func checkoutMsg(flowCtx1 *flowCtx, cnn net.Conn) {
 		}
 	}
 }
+
 func dial(flowCtx1 *flowCtx, helloBytes []byte) {
 dialLoop:
 	for {
 		d := net.Dialer{}
 		cnn, err := d.DialContext(flowCtx1.WaitCtx, "tcp", flowCtx1.RAddr)
 		if err != nil {
-			flowCtx1.nonBlockEnqErr(errors.Wrapf(err, "dial %v err= %v", flowCtx1.RAddr, err))
+			flowCtx1.nonBlockEnqErr(fmt.Errorf("dial %v err= %w", flowCtx1.RAddr, err))
 		}
 		// this is what we exit
 		select {
@@ -142,7 +128,7 @@ dialLoop:
 		//
 		log.Printf("dialer got connection =%v-%v", cnn.LocalAddr(), cnn.RemoteAddr())
 
-		noWait, closeWaitGrp := takeOverCnnClose(flowCtx1.WaitCtx, cnn)
+		wait, stop := fnet.CloseWhenContext(flowCtx1.WaitCtx, cnn)
 
 		// when the cnn broken, we need redial
 		// if move `checkoutMsg` to sub routine
@@ -150,8 +136,8 @@ dialLoop:
 		//   whether the cnn is broken or not when reading
 		_, _ = cnn.Write(helloBytes)
 		checkoutMsg(flowCtx1, cnn)
-		close(noWait)
-		closeWaitGrp.Wait()
+		stop()
+		<-wait.Done()
 
 		// this is what we exit
 		select {
@@ -186,24 +172,6 @@ func beautyJson(cnt int64, j []byte) []byte {
 	return j
 }
 
-func setupSignal(flowCtx1 *flowCtx, cancel context.CancelFunc) {
-
-	sigCh := make(chan os.Signal, 2)
-
-	signal.Notify(sigCh, os.Interrupt)
-	signal.Notify(sigCh, syscall.SIGTERM)
-
-	flowCtx1.Wg.Add(1)
-	go func() {
-		select {
-		case <-sigCh:
-			cancel()
-		case <-flowCtx1.WaitCtx.Done():
-		}
-		flowCtx1.Wg.Done()
-	}()
-}
-
 func main() {
 
 	var cancel context.CancelFunc
@@ -212,7 +180,7 @@ func main() {
 	hello1 := &hello{}
 	flowCtx1.ErrsCh = make(chan error, 10)
 	flowCtx1.MsgCh = make(chan []byte, 1000*1000)
-	flowCtx1.WaitCtx, cancel = context.WithCancel(context.Background())
+	flowCtx1.WaitCtx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
 	flowCtx1.Wg = &sync.WaitGroup{}
 	flag.StringVar(&flowCtx1.RAddr, "raddr", "127.0.0.1:5679", "sender addr of flow msg")
@@ -224,7 +192,6 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.SetPrefix(fmt.Sprintf("pid= %v ", os.Getpid()))
 
-	setupSignal(flowCtx1, cancel)
 	flowCtx1.Wg.Add(1)
 	go func() {
 		dial(flowCtx1, hello1.Bytes())
