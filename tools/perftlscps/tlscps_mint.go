@@ -1,9 +1,5 @@
 package main
 
-// failed for test TLSv1.3
-
-// 以后不用第三方 package 了，官方的能支持 TLSv1.3 了
-
 import (
 	"bytes"
 	"encoding/binary"
@@ -25,7 +21,6 @@ func mintHexView(v interface{}) string {
 }
 
 func main1() {
-
 	var raddr string
 
 	raddr = "127.0.0.1:886"

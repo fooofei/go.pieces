@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"math"
 	"net"
@@ -20,6 +19,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+
+	fnet "github.com/fooofei/pkg/net"
 )
 
 // globals
@@ -76,11 +77,11 @@ func (pc *perfContext) nonBlockEnqErr(err error) {
 func deepCopy(src interface{}, dst interface{}) error {
 	bytes_, err := json.Marshal(src)
 	if err != nil {
-		return errors.Wrapf(err, "fail call json.Marshal")
+		return fmt.Errorf("fail call json.Marshal, err %w", err)
 	}
 	err = json.Unmarshal(bytes_, dst)
 	if err != nil {
-		return errors.Wrapf(err, "fail call json.Unmarshal")
+		return fmt.Errorf("fail call json.Unmarshal, err %w", err)
 	}
 	return nil
 }
@@ -103,21 +104,6 @@ func toBEBytes(v interface{}) []byte {
 	return binBuf.Bytes()
 }
 
-func takeOverCnnClose(waitCtx context.Context, cnn io.Closer) (chan bool, *sync.WaitGroup) {
-	noWait := make(chan bool, 1)
-	waitGrp := &sync.WaitGroup{}
-	waitGrp.Add(1)
-	go func() {
-		select {
-		case <-noWait:
-		case <-waitCtx.Done():
-		}
-		_ = cnn.Close()
-		waitGrp.Done()
-	}()
-	return noWait, waitGrp
-}
-
 func boomTls(perfCtx *perfContext, cnn net.Conn) {
 	tlsCnn := tls.Client(cnn, perfCtx.TlsConf)
 	err := tlsCnn.Handshake()
@@ -132,8 +118,7 @@ func boomTls(perfCtx *perfContext, cnn net.Conn) {
 }
 
 func boomRoutine(perfCtx *perfContext) {
-
-	tmo := time.Duration(time.Second * 3)
+	tmo := time.Second * 3
 boomLoop:
 	for {
 		d := &net.Dialer{Timeout: tmo}
@@ -145,10 +130,10 @@ boomLoop:
 			perfCtx.nonBlockEnqErr(err)
 		} else {
 			atomic.AddInt64(&perfCtx.stat.TcpCntOk, 1)
-			noWait, waitGrp := takeOverCnnClose(perfCtx.WaitCtx, tcpCnn)
+			wait, stop := fnet.CloseWhenContext(perfCtx.WaitCtx, tcpCnn)
 			boomTls(perfCtx, tcpCnn)
-			close(noWait)
-			waitGrp.Wait()
+			stop()
+			<-wait.Done()
 		}
 		select {
 		case <-perfCtx.WaitCtx.Done():
@@ -159,7 +144,6 @@ boomLoop:
 }
 
 func statRoutine(perfCtx *perfContext) {
-
 	var err error
 
 	statTick := time.NewTicker(perfCtx.StatDur)
@@ -199,24 +183,7 @@ statLoop:
 		case err = <-perfCtx.ErrCh:
 			log.Printf("hit err= %v", err)
 		}
-
 	}
-
-}
-
-func setupSignal(waitCtx context.Context, waitGrp *sync.WaitGroup, cancel context.CancelFunc) {
-	sigCh := make(chan os.Signal, 2)
-	signal.Notify(sigCh, os.Interrupt)
-	signal.Notify(sigCh, syscall.SIGTERM)
-	waitGrp.Add(1)
-	go func() {
-		select {
-		case <-sigCh:
-			cancel()
-		case <-waitCtx.Done():
-		}
-		waitGrp.Done()
-	}()
 }
 
 func beginPerf(perfCtx *perfContext) {
@@ -268,8 +235,8 @@ func main() {
 	flag.Int64Var(&perfCtx.RoutinesCnt, "routines", 1, "count of keep running go routines")
 	flag.StringVar(&perfCtx.RAddr, "raddr", "127.0.0.1:886", "to perf tcp-ssl addr")
 	flag.IntVar(&interval, "interval", 3, "stat interval (sec)")
-	flag.StringVar(&tlsMinVer, "tls_min_ver", "tls12", fmt.Sprintf("the min tls version (%v)", tlsVers))
-	flag.StringVar(&tlsMaxVer, "tls_max_ver", "tls13", fmt.Sprintf("the max tls version (%v)", tlsVers))
+	flag.StringVar(&tlsMinVer, "tls-min-ver", "tls12", fmt.Sprintf("the min tls version (%v)", tlsVers))
+	flag.StringVar(&tlsMaxVer, "tls-max-ver", "tls13", fmt.Sprintf("the max tls version (%v)", tlsVers))
 	flag.Parse()
 	perfCtx.StatDur = time.Second * time.Duration(interval)
 	perfCtx.ErrCh = make(chan error, 10)
@@ -287,16 +254,14 @@ func main() {
 		log.Printf("set TlsConf.MaxVersion= %v", tlsMaxVer)
 	}
 
-	perfCtx.WaitCtx, cancel = context.WithCancel(context.Background())
+	perfCtx.WaitCtx, cancel = signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	perfCtx.Wg = new(sync.WaitGroup)
+	defer cancel()
 
 	log.SetPrefix(fmt.Sprintf("pid= %v ", os.Getpid()))
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	log.Printf("use routines=%v to raddr= %v\n", perfCtx.RoutinesCnt, perfCtx.RAddr)
-
-	setupSignal(perfCtx.WaitCtx, perfCtx.Wg, cancel)
-
 	beginPerf(perfCtx)
 
 	log.Printf("wait all routines to exit")
