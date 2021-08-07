@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+// 测试连接 TCP-TLS 端口 发送消息
+
 func main() {
 	var ctx context.Context
 	var cancel context.CancelFunc
