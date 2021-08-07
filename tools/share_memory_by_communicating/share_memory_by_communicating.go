@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// 官方例子
 // download from https://golang.org/doc/codewalk/sharemem/
 
 const (
@@ -87,7 +88,6 @@ func Poller(in <-chan *Resource, out chan<- *Resource, status chan<- State) {
 }
 
 func main() {
-
 	var urls = []string{
 		"http://www.sohu.com/",
 		"https://www.baidu.com/",
