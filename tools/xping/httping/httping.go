@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/fooofei/ping/pkg/pinger"
+	"github.com/fooofei/tools/ping/pkg/pinger"
 )
 
 type httpingOp struct {
