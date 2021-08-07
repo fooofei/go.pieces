@@ -11,9 +11,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -77,7 +79,6 @@ func fetchIpRoutine(wk *workItem, ctx *parallelHttpCtx) {
 // when all result done before cancel() then notify a chan
 // can be cancel()
 func waitAllResultRoutine(ctx *parallelHttpCtx, cnt int) {
-	//
 	for i := 0; i < cnt; i += 1 {
 		select {
 		case <-ctx.WaitCtx.Done():
@@ -268,7 +269,8 @@ func main() {
 	ctx.Results = list.New()
 	ctx.ResultCh = make(chan *workItem, len(pubSrvs))
 	ctx.AllResultDoneCh = make(chan bool)
-	ctx.WaitCtx, cancel = context.WithCancel(context.Background())
+	ctx.WaitCtx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 	//
 	log.Printf("do work")
 	for i := 0; i < len(pubSrvs); i += 1 {

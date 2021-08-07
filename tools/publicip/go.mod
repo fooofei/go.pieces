@@ -1,3 +1,3 @@
-module publicip
+module github.com/fooofei/tools/publicip
 
-go 1.12
+go 1.16
