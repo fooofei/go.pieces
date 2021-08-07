@@ -63,7 +63,6 @@ func (c *Conf) ToMap() {
 
 func setupServer(conf *Conf) {
 	// attach request handler func
-
 	for _, rec := range conf.Records {
 		dns.HandleFunc(rec.Domain, conf.handleRequest)
 	}
@@ -78,7 +77,6 @@ func setupServer(conf *Conf) {
 }
 
 func main() {
-
 	conf := &Conf{}
 	fp, _ := os.Executable()
 	fp = filepath.Dir(fp)
