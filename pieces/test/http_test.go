@@ -2,7 +2,9 @@ package test
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	stdlog "log"
 	"net"
 	"net/http"
@@ -15,13 +17,11 @@ import (
 	_ "github.com/julienschmidt/httprouter"
 )
 
-var logger logr.Logger
-
 func sampleHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprintf(w, "this is a test")
 }
 
-func setupServer(ctx context.Context) error {
+func setupServer(ctx context.Context, logger logr.Logger) error {
 	metricAddr := ":8888"
 	// 构建一个局部 http server，不使用 http 包的默认 server
 	// 使用全局的会跟其他包注册到同一个路由上，会互相妨碍
@@ -58,11 +58,11 @@ func setupServer(ctx context.Context) error {
 
 func ExampleHTTPServer() {
 	ctx, cancel := context.WithCancel(context.Background())
-	logger = stdr.New(stdlog.New(os.Stdout, "", stdlog.Lshortfile|stdlog.LstdFlags))
+	logger := stdr.New(stdlog.New(os.Stdout, "", stdlog.Lshortfile|stdlog.LstdFlags))
 	logger = logger.WithValues("pid", os.Getpid())
 	logger.Info("enter main")
 	ctx, _ = context.WithTimeout(ctx, 6*time.Second)
-	err := setupServer(ctx)
+	err := setupServer(ctx, logger)
 	logger.Error(err, "err is")
 	logger.Info("main routine exit")
 	time.Sleep(time.Minute)
@@ -84,3 +84,25 @@ func ExampleHTTPDisableProxy() {
 	}
 	_ = &http.Client{Transport: tr}
 }
+
+
+// NewCertPool read ca.cert files to make CertPool.
+// ca 证书
+func NewCertPool(CAFiles []string) (*x509.CertPool, error) {
+	cp := x509.NewCertPool()
+	for _, CAFile := range CAFiles {
+		pemByte, err := ioutil.ReadFile(CAFile)
+		if err != nil {
+			return nil, err
+		}
+		ok := cp.AppendCertsFromPEM(pemByte)
+		if !ok {
+			return nil, fmt.Errorf("failed AppendCertsFromPEM() for %v", CAFile)
+		}
+	}
+	return cp, nil
+}
+
+// 加载 certFile keyFile 示例
+//   config.Certificates = make([]tls.Certificate, 1)
+//   config.Certificates[0], err = tls.LoadX509KeyPair(certFile, keyFile)

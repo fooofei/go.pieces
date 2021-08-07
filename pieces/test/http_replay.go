@@ -31,6 +31,10 @@ func getFastHTTPRequest() *fasthttp.Request {
 
  */
 
+// requestFromString 从一个字节流里解析为 request 对象
+// 字节流的格式为 Wireshark 抓包看到的 HTTP 格式
+// 在发送出去一定要干几件事，否则会发送失败
+// 如果 request 是从 golang 自己的 handler 里拿到的，不是我们解析得到的，也要干这几件事才能发送出去
 func requestFromString(ctx context.Context, content []byte) (*http.Request, error) {
 	var err error
 	var req *http.Request
