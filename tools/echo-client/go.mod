@@ -1,4 +1,4 @@
-module github.com/fooofei/echo-client
+module github.com/fooofei/tools/echo-client
 
 replace github.com/fooofei/pkg => ../../pkg
 

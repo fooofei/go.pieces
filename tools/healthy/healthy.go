@@ -3,33 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
-	"sync"
 
+	fnet "github.com/fooofei/pkg/net"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 )
 
 // 如何检查一个服务器或者开放的服务的健康与否
 // ICMP TCP UDP 三种途径的示例
-
-func takeOverCnnClose(waitCtx context.Context, cnn io.Closer) (chan bool, *sync.WaitGroup) {
-	noWait := make(chan bool, 1)
-	waitGrp := &sync.WaitGroup{}
-	waitGrp.Add(1)
-	go func() {
-		select {
-		case <-noWait:
-		case <-waitCtx.Done():
-		}
-		_ = cnn.Close()
-		waitGrp.Done()
-	}()
-	return noWait, waitGrp
-}
 
 // raddr is ip
 // if not error, the server alive well
@@ -55,11 +39,11 @@ func icmpAlive(waitCtx context.Context, raddr string) error {
 		return err
 	}
 	_, _ = c.Write(bs)
-	noWait, waitGrp := takeOverCnnClose(waitCtx, c)
+	waitCnnCose, closeCnn := fnet.CloseWhenContext(waitCtx, c)
 	rbs := make([]byte, 32*1024)
 	n, err := c.Read(rbs)
-	close(noWait)
-	waitGrp.Wait()
+	closeCnn()
+	<-waitCnnCose.Done()
 
 	if err != nil {
 		return err
@@ -75,7 +59,7 @@ func icmpAlive(waitCtx context.Context, raddr string) error {
 	return fmt.Errorf("icmp peer reply not expect type=%v", msg.Type)
 }
 
-// raddr is server ip:port
+// tcpAlive 检查 tcp 端口是否健康 raddr is server ip:port
 func tcpAlive(waitCtx context.Context, raddr string) error {
 	d := &net.Dialer{}
 	c, err := d.DialContext(waitCtx, "tcp", raddr)
@@ -85,7 +69,7 @@ func tcpAlive(waitCtx context.Context, raddr string) error {
 	return c.Close()
 }
 
-// raddr is server's ip:port
+// udpAlive 检查 udp 端口是否健康 raddr is server's ip:port
 func udpAlive(waitCtx context.Context, raddr string) error {
 	var err error
 	d := &net.Dialer{}
@@ -98,11 +82,11 @@ func udpAlive(waitCtx context.Context, raddr string) error {
 		_ = c.Close()
 		return err
 	}
-	noWait, waitGrp := takeOverCnnClose(waitCtx, c)
+	wait, stop := fnet.CloseWhenContext(waitCtx, c)
 	rbs := make([]byte, 32*1024)
 	n, err := c.Read(rbs)
-	close(noWait)
-	waitGrp.Wait()
+	stop()
+	<-wait.Done()
 	if err != nil {
 		return err
 	}
@@ -112,6 +96,5 @@ func udpAlive(waitCtx context.Context, raddr string) error {
 }
 
 func main() {
-
 	log.Printf("main exit")
 }

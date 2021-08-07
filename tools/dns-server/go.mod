@@ -1,4 +1,4 @@
-module dns-server
+module github.com/fooofei/tools/dns-server
 
 go 1.16
 
