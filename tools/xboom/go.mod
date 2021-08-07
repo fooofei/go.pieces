@@ -1,5 +1,3 @@
-module github.com/fooofei/xboom
+module github.com/fooofei/tools/xboom
 
 go 1.12
-
-require github.com/pkg/errors v0.8.1

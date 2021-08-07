@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/fooofei/xboom"
+	"github.com/fooofei/tools/xboom"
 )
 
 type udpBoomOp struct {
@@ -39,7 +39,6 @@ func (ub *udpBoomOp) Close() error {
 }
 
 func main() {
-
 	ub := &udpBoomOp{}
 	ub.Pld, _ = hex.DecodeString(``)
 	ub.RAddr = "114.116.111.96:5683"

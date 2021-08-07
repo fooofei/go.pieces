@@ -15,8 +15,6 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 type boomContext struct {
@@ -93,7 +91,6 @@ func trendsString(trends []*rateStat) string {
 }
 
 func state(boomCtx *boomContext) {
-
 	tick := time.Tick(time.Second * 3)
 
 	oldTime := time.Now()
@@ -148,7 +145,7 @@ boomLoop:
 
 		err = boomOp.LoadBullet(boomCtx.WaitCtx, boomCtx.RAddr)
 		if err != nil {
-			boomCtx.nonBlockEnqErr(errors.Wrapf(err, "fail LoadBullet"))
+			boomCtx.nonBlockEnqErr(fmt.Errorf("fail LoadBullet err %w", err))
 			continue
 		}
 	shootLoop:
@@ -167,7 +164,7 @@ boomLoop:
 			}
 			if err != nil {
 				atomic.AddInt64(&boomCtx.stat.boomFailCnt, 1)
-				boomCtx.nonBlockEnqErr(errors.Wrapf(err, "fail Shoot"))
+				boomCtx.nonBlockEnqErr(fmt.Errorf("fail Shoot err %w", err))
 				break shootLoop
 			}
 			atomic.AddInt64(&boomCtx.stat.boomOkCnt, 1)
@@ -176,21 +173,6 @@ boomLoop:
 
 		_ = boomOp.Close()
 	}
-}
-
-func setupSignal(waitCtx context.Context, waitGrp *sync.WaitGroup, cancel context.CancelFunc) {
-	sigCh := make(chan os.Signal, 2)
-	signal.Notify(sigCh, os.Interrupt)
-	signal.Notify(sigCh, syscall.SIGTERM)
-	waitGrp.Add(1)
-	go func() {
-		select {
-		case <-waitCtx.Done():
-		case <-sigCh:
-			cancel()
-		}
-		waitGrp.Done()
-	}()
 }
 
 // Gatelin is the name of 加特林, a kind of gun
@@ -214,8 +196,9 @@ func Gatelin(boomOp BoomOp) {
 		flag.PrintDefaults()
 		return
 	}
-	boomCtx.WaitCtx, cancel = context.WithCancel(context.Background())
+	boomCtx.WaitCtx, cancel = signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	boomCtx.ErrorCh = make(chan error, 5)
+	defer cancel()
 
 	for i = 0; i < boomCtx.GoCnt; i++ {
 		boomCtx.Wg.Add(1)
@@ -224,7 +207,6 @@ func Gatelin(boomOp BoomOp) {
 			boomCtx.Wg.Done()
 		}()
 	}
-	setupSignal(boomCtx.WaitCtx, boomCtx.Wg, cancel)
 	state(boomCtx)
 	cancel()
 	log.Printf("wait to exit")

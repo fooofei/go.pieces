@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/fooofei/xboom"
+	"github.com/fooofei/tools/xboom"
 )
 
 // 测试一个 HTTP 服务的 Performance
