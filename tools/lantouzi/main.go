@@ -11,26 +11,10 @@ import (
 	"syscall"
 )
 
-func setupSignal(waitCtx context.Context, waitGrp *sync.WaitGroup, cancel context.CancelFunc) {
-	sigCh := make(chan os.Signal, 2)
-	signal.Notify(sigCh, os.Interrupt)
-	signal.Notify(sigCh, syscall.SIGTERM)
-	waitGrp.Add(1)
-	go func() {
-		select {
-		case <-sigCh:
-			cancel()
-		case <-waitCtx.Done():
-		}
-		waitGrp.Done()
-	}()
-}
 
 func main() {
 	wg := &sync.WaitGroup{}
-	ctx, cancel := context.WithCancel(context.Background())
-
-	setupSignal(ctx, wg, cancel)
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	crawlLantouzi(ctx)
 
 	cancel()
