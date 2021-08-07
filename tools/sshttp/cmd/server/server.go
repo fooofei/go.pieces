@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/pkg/errors"
 	"io"
 	"log"
 	"net"
@@ -14,11 +13,11 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/fooofei/sshttp"
+	fnet "github.com/fooofei/pkg/net"
+	"github.com/fooofei/tools/sshttp"
 )
 
 func pipeConnReadApp(app io.Reader, tun *sshttp.Tunnel) {
-
 	buf := make([]byte, 128*1024)
 pipeLoop:
 	for {
@@ -36,8 +35,8 @@ pipeLoop:
 		}
 	}
 }
-func pipeConnReadTun(app io.Writer, tun *sshttp.Tunnel) {
 
+func pipeConnReadTun(app io.Writer, tun *sshttp.Tunnel) {
 pipeLoop:
 	for {
 		nw, ew := tun.WriteTo(app)
@@ -98,87 +97,53 @@ func serve(ctx context.Context, conn net.Conn) error {
 	var err error
 	var httpPath *sshttp.HttpPath
 
-	closeTunNoWait, _ := takeOverCloser(ctx, conn)
-	defer close(closeTunNoWait)
+	_, stop := fnet.CloseWhenContext(ctx, conn)
+	defer stop()
 
 	req, err = http.ReadRequest(t.R)
 	if err != nil {
-		return errors.Wrapf(err, "fail read first http.ReadRequest")
+		return fmt.Errorf("fail read first http.ReadRequest, err %w", err)
 	}
 	httpPath, err = sshttp.ParseUrlPath(req.URL)
 	if err != nil {
-		return errors.Wrapf(err, "fail path= %v", req.URL)
+		return fmt.Errorf("fail path= %v, err %w", req.URL, err)
 	}
 	log.Printf("first Response = %v", httpPath)
 
 	if httpPath.Type != "login" {
-		return errors.Wrapf(err, "httpPath.Type %v != login", httpPath)
+		return fmt.Errorf("httpPath.Type %v != login, err %w", httpPath, err)
 	}
 	// send hello back
 	req, err = sshttp.NewLogin()
 	if err != nil {
-		return errors.WithStack(err)
+		return fmt.Errorf("failed ssh newLogin err %w", err)
 	}
 	err = req.Write(t.W)
-	
+
 	req, err = http.ReadRequest(t.R)
 	if err != nil {
-		return errors.Wrapf(err, "fail read second http.ReadRequest")
+		return fmt.Errorf("fail read second http.ReadRequest err %w", err)
 	}
 	httpPath, err = sshttp.ParseUrlPath(req.URL)
 	if err != nil {
-		return errors.Wrapf(err, "fail path= %v", req.URL)
+		return fmt.Errorf("fail path= %v, err %w", req.URL, err)
 	}
 	if httpPath.Type != "proxy" {
-		return errors.Errorf("Unexpected second Reponse = %v ", httpPath)
+		return fmt.Errorf("Unexpected second Reponse = %v ", httpPath)
 	}
 	sshdAddr := req.Header.Get("Connect")
 	if sshdAddr == "" {
-		return errors.Errorf("empty sshdAddr in Connect")
+		return fmt.Errorf("empty sshdAddr in Connect")
 	}
 
 	d := net.Dialer{}
 	app, err := d.DialContext(ctx, "tcp", sshdAddr)
 	if err != nil {
-		return errors.Wrapf(err, "fail Dial")
+		return fmt.Errorf("fail Dial err %w", err)
 	}
 	pipeConn(app, t)
 	log.Printf("leave serve")
 	return nil
-}
-
-func setupSignal(waitCtx context.Context, waitGrp *sync.WaitGroup, cancel context.CancelFunc) {
-
-	sigCh := make(chan os.Signal, 2)
-
-	signal.Notify(sigCh, os.Interrupt)
-	signal.Notify(sigCh, syscall.SIGTERM)
-
-	waitGrp.Add(1)
-	go func() {
-		select {
-		case <-sigCh:
-			cancel()
-		case <-waitCtx.Done():
-		}
-		waitGrp.Done()
-	}()
-}
-
-func takeOverCloser(waitCtx context.Context, closer io.Closer) (chan bool, *sync.WaitGroup) {
-
-	noWait := make(chan bool, 1)
-	waitGrp := &sync.WaitGroup{}
-	waitGrp.Add(1)
-	go func() {
-		select {
-		case <-noWait:
-		case <-waitCtx.Done():
-		}
-		_ = closer.Close()
-		waitGrp.Done()
-	}()
-	return noWait, waitGrp
 }
 
 func main() {
@@ -190,17 +155,17 @@ func main() {
 	log.SetPrefix(fmt.Sprintf("pid =%v ", os.Getpid()))
 
 	addr := ":3389"
-	ctx, cancel = context.WithCancel(context.Background())
+	ctx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 	waitGrp := &sync.WaitGroup{}
 
-	setupSignal(ctx, waitGrp, cancel)
 	lc := &net.ListenConfig{}
 	conn, err := lc.Listen(ctx, "tcp", addr)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Printf("serve at %v", addr)
-	closerNoWait, closerWaitGrp := takeOverCloser(ctx, conn)
+	wait, closerWaitGrp := fnet.CloseWhenContext(ctx, conn)
 acceptLoop:
 	for {
 		subconn, err := conn.Accept()
@@ -227,7 +192,7 @@ acceptLoop:
 	}
 
 	waitGrp.Wait()
-	close(closerNoWait)
-	closerWaitGrp.Wait()
+	closerWaitGrp()
+	<-wait.Done()
 	log.Printf("main exit")
 }

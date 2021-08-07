@@ -8,8 +8,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 const (
@@ -33,7 +31,7 @@ func ParseHTTPPath(path string) (*HttpPath, error) {
 	hp := &HttpPath{}
 	tsa := strings.Split(path, "/")
 	if len(tsa) < 4 {
-		return nil, errors.Errorf("short head http path \"%v\"", path)
+		return nil, fmt.Errorf("short head http path \"%v\"", path)
 	}
 	hp.Type = tsa[1]
 	v1, err := strconv.ParseFloat(tsa[2], 64)

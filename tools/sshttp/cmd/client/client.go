@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/fooofei/sshttp"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"sync"
+
+	"github.com/fooofei/tools/sshttp"
 )
 
 func usage(program string) string {
