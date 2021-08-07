@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/kbinani/win"
 	"net"
 	"os"
 	"syscall"
 	"unsafe"
 
-	"github.com/fooofei/go_pieces/pkg/netaddr"
+	netaddr "github.com/fooofei/pkg/net/addr"
+	"github.com/kbinani/win"
 )
 
 type Route struct {
