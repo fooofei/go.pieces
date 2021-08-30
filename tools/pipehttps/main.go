@@ -16,7 +16,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -93,6 +92,9 @@ func (s *service) URL() string {
 }
 
 func (s *service) Join() string {
+	if s.Port == "" {
+		return s.Host
+	}
 	return net.JoinHostPort(s.Host, s.Port)
 }
 
@@ -106,7 +108,7 @@ type customizedHandler struct {
 	clt    *http.Client
 	gtx    context.Context
 	Count  int64
-	Mapper map[string]servicePair
+	pair   servicePair
 }
 
 func pipeResponse(resp *http.Response, w http.ResponseWriter) {
@@ -126,22 +128,18 @@ func (h *customizedHandler) ServeHTTP(w http.ResponseWriter, fromReq *http.Reque
 	defer func() {
 		fmt.Print(b.String())
 	}()
-	_, _ = fmt.Fprintf(b, "---req %v---------------------------------------------------------\n", count)
+
 	toReq := fromReq.Clone(ctx)
+	toReq.URL.Scheme = h.pair.To.Scheme
 
-	toService, ok := h.Mapper[fromReq.Host]
-	if !ok {
-		err := fmt.Errorf("cannot found which service forward to")
-		_, _ = fmt.Fprintf(b, "error: <%T>%v\n", err, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	toReq.URL.Scheme = toService.To.Scheme
-	toReq.Host = toService.To.Join()
+	// 不能替换，有的同一个 ip 地址对应多个 host 域名
+	//toReq.Host = h.pair.To.Join()
 	toReq.URL.Host = toReq.Host
+
 	toReq.RequestURI = "" // must clear
 
+	_, _ = fmt.Fprintf(b, "---req %v----------from %v to %v----------------------------------------\n",
+		count, h.pair.From.URL(), h.pair.To.URL())
 	WithDumpReq(b)(toReq)
 	resp, err := h.clt.Do(toReq)
 	if err != nil {
@@ -149,6 +147,8 @@ func (h *customizedHandler) ServeHTTP(w http.ResponseWriter, fromReq *http.Reque
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	_, _ = fmt.Fprintf(b, "---resp %v----------from %v to %v----------------------------------------\n",
+		count, h.pair.From.URL(), h.pair.To.URL())
 	WithDumpResp(b)(resp)
 	// 这个方法不是 pipe 作用，不符合预期
 	// _ = resp.Write(w)
@@ -162,24 +162,26 @@ func parseURL(path string) (*service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed url.Parse '%v' %w", path, err)
 	}
-	tcpAddr, err := net.ResolveTCPAddr("tcp", u.Host)
-	if err != nil {
-		return nil, err
-	}
 	s.Scheme = u.Scheme
-	s.Host = tcpAddr.IP.String()
-	s.Port = strconv.Itoa(tcpAddr.Port)
+	host, port, err := net.SplitHostPort(u.Host)
+	if err == nil {
+		s.Host = host
+		s.Port = port
+	} else {
+		s.Host = u.Host
+		s.Port = ""
+	}
 	return s, nil
 }
 
 // parseMapper 解析配置文件
-func parseMapper(filePath string) (map[string]servicePair, error) {
+func parseMapper(filePath string) ([]servicePair, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
-	m := make(map[string]servicePair)
 	s := bufio.NewScanner(bytes.NewReader(content))
+	pairs := make([]servicePair, 0)
 	for s.Scan() {
 		line := s.Text()
 		if strings.HasPrefix(line, "#") {
@@ -197,13 +199,12 @@ func parseMapper(filePath string) (map[string]servicePair, error) {
 		if s2, err = parseURL(pair[1]); err != nil {
 			return nil, err
 		}
-
-		m[s1.Join()] = servicePair{
+		pairs = append(pairs, servicePair{
 			From: s1,
 			To:   s2,
-		}
+		})
 	}
-	return m, nil
+	return pairs, nil
 }
 
 func main() {
@@ -232,27 +233,39 @@ func main() {
 	// 关闭使用代理
 	tr.Proxy = nil
 	tr.TLSClientConfig.InsecureSkipVerify = true // 我们的目的是定位问题 忽略证书校验
-	m := http.NewServeMux()
-	mapper, err := parseMapper(mapperFilePath)
+
+	pairs, err := parseMapper(mapperFilePath)
 	if err != nil {
 		panic(err)
 	}
-	ch := &customizedHandler{
-		logger: logger.WithName("customizedHandler"),
-		gtx:    ctx,
-		clt: &http.Client{
-			Transport:     tr,
-			CheckRedirect: nil,
-			Jar:           nil,
-			Timeout:       0,
-		},
-		Mapper: mapper,
-	}
-	m.Handle("/", ch)
 
-	for _, v := range ch.Mapper {
-		value := net.JoinHostPort("", v.From.Port)
-		logger.Info("Serve HTTP", "addr", value, "from", v.From.URL(), "to", v.To.URL())
+	for _, v := range pairs {
+		var value string
+		if v.From.Port == "" {
+			if v.From.Scheme == "https" {
+				value = ":443"
+			} else {
+				value = ":80"
+			}
+		} else {
+			value = net.JoinHostPort("", v.From.Port)
+		}
+		l := logger.WithValues("from", v.From.URL(), "to", v.To.URL())
+		ch := &customizedHandler{
+			logger: l.WithName("customizedHandler"),
+			gtx:    ctx,
+			clt: &http.Client{
+				Transport:     tr,
+				CheckRedirect: nil,
+				Jar:           nil,
+				Timeout:       0,
+			},
+			Count: 0,
+			pair:  v,
+		}
+		m := http.NewServeMux()
+		m.Handle("/", ch)
+		l.Info("Serve HTTP", "addr", value)
 		switch v.From.Scheme {
 		case "https":
 			// https 要本地预置证书文件
