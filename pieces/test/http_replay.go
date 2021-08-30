@@ -29,7 +29,7 @@ func getFastHTTPRequest() *fasthttp.Request {
 	return req
 }
 
- */
+*/
 
 // requestFromString 从一个字节流里解析为 request 对象
 // 字节流的格式为 Wireshark 抓包看到的 HTTP 格式
@@ -51,9 +51,9 @@ func requestFromString(ctx context.Context, content []byte) (*http.Request, erro
 	return req, nil
 }
 
-
-func WithDumpReq() func(io.Writer, *http.Request) {
-	return func(w io.Writer, req *http.Request) {
+// WithDumpReq will dump request as http format
+func WithDumpReq(w io.Writer) func(*http.Request) {
+	return func(req *http.Request) {
 		// dump must before .Do()
 		content, err := httputil.DumpRequest(req, true)
 		if err != nil {
@@ -64,8 +64,9 @@ func WithDumpReq() func(io.Writer, *http.Request) {
 	}
 }
 
-func WithDumpResp() func(io.Writer, *http.Response) {
-	return func(w io.Writer, resp *http.Response) {
+// WithDumpResp will dump response as http format
+func WithDumpResp(w io.Writer) func(*http.Response) {
+	return func(resp *http.Response) {
 		content, err := httputil.DumpResponse(resp, true)
 		if err != nil {
 			_, _ = fmt.Fprintf(w, "error: <%T>%v\n", err, err)

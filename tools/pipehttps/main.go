@@ -33,8 +33,9 @@ import (
 // http://127.0.0.1:18100 https://example.com:1984
 // https://127.0.0.1:18101 https://example.com:1984
 
-func WithDumpReq() func(io.Writer, *http.Request) {
-	return func(w io.Writer, req *http.Request) {
+// WithDumpReq will dump request as http format
+func WithDumpReq(w io.Writer) func(*http.Request) {
+	return func(req *http.Request) {
 		// dump must before .Do()
 		content, err := httputil.DumpRequest(req, true)
 		if err != nil {
@@ -45,8 +46,9 @@ func WithDumpReq() func(io.Writer, *http.Request) {
 	}
 }
 
-func WithDumpResp() func(io.Writer, *http.Response) {
-	return func(w io.Writer, resp *http.Response) {
+// WithDumpResp will dump response as http format
+func WithDumpResp(w io.Writer) func(*http.Response) {
+	return func(resp *http.Response) {
 		content, err := httputil.DumpResponse(resp, true)
 		if err != nil {
 			_, _ = fmt.Fprintf(w, "error: <%T>%v\n", err, err)
@@ -140,14 +142,14 @@ func (h *customizedHandler) ServeHTTP(w http.ResponseWriter, fromReq *http.Reque
 	toReq.URL.Host = toReq.Host
 	toReq.RequestURI = "" // must clear
 
-	WithDumpReq()(b, toReq)
+	WithDumpReq(b)(toReq)
 	resp, err := h.clt.Do(toReq)
 	if err != nil {
 		_, _ = fmt.Fprintf(b, "error: <%T>%v\n", err, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	WithDumpResp()(b, resp)
+	WithDumpResp(b)(resp)
 	// 这个方法不是 pipe 作用，不符合预期
 	// _ = resp.Write(w)
 	pipeResponse(resp, w)
