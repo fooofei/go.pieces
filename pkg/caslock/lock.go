@@ -2,13 +2,14 @@ package caslock
 
 import (
 	"context"
+	"golang.org/x/sync/semaphore"
 	"runtime"
 	"sync"
 	"sync/atomic"
-	"unsafe"
-
-	"golang.org/x/sync/semaphore"
 )
+
+// a lock implement from https://github.com/viney-shih/go-lock/blob/master/cas.go
+// with context
 
 const (
 	stateUndefined int32 = iota - 2 // -2
@@ -24,14 +25,14 @@ type CASMutex struct {
 	broadcastMut sync.RWMutex
 }
 
-func (m *CASMutex) listen() <-chan struct{} {
+func (m *CASMutex) getTicket() <-chan struct{} {
 	m.broadcastMut.RLock()
 	defer m.broadcastMut.RUnlock()
 
 	return m.broadcastCh
 }
 
-func (m *CASMutex) getState(n int32) int32 {
+func (m *CASMutex) mapState(n int32) int32 {
 	switch {
 	case n == stateWriteLock:
 		return stateWriteLock
@@ -48,11 +49,11 @@ func (m *CASMutex) broadcast() {
 	newCh := make(chan struct{})
 
 	m.broadcastMut.Lock()
-	ch := m.broadcastCh
+	oldCh := m.broadcastCh
 	m.broadcastCh = newCh
 	m.broadcastMut.Unlock()
 
-	close(ch)
+	close(oldCh)
 }
 
 func (m *CASMutex) TryLock(ctx context.Context) bool {
@@ -73,12 +74,9 @@ func (m *CASMutex) Lock(ctx context.Context) bool {
 
 func (m *CASMutex) tryLock(ctx context.Context) bool {
 	for {
-		broadcastCh := m.listen()
-		if atomic.CompareAndSwapInt32((*int32)(unsafe.Pointer(&m.state)), stateNoLock, stateWriteLock) {
+		broadcastCh := m.getTicket()
+		if atomic.CompareAndSwapInt32(&m.state, stateNoLock, stateWriteLock) {
 			return true
-		}
-		if ctx == nil {
-			return false
 		}
 		select {
 		case <-ctx.Done():
@@ -89,7 +87,7 @@ func (m *CASMutex) tryLock(ctx context.Context) bool {
 }
 
 func (m *CASMutex) Unlock() {
-	if ok := atomic.CompareAndSwapInt32((*int32)(unsafe.Pointer(&m.state)), stateWriteLock, stateNoLock); !ok {
+	if ok := atomic.CompareAndSwapInt32(&m.state, stateWriteLock, stateNoLock); !ok {
 		panic("Unlock failed")
 	}
 	m.broadcast()
@@ -101,12 +99,12 @@ func (m *CASMutex) RLock(ctx context.Context) bool {
 	}
 	m.turnstile.Release(1)
 	for {
-		broadcastCh := m.listen()
-		n := atomic.LoadInt32((*int32)(unsafe.Pointer(&m.state)))
-		st := m.getState(n)
+		broadcastCh := m.getTicket()
+		n := atomic.LoadInt32(&m.state)
+		st := m.mapState(n)
 		switch st {
 		case stateNoLock, stateReadLock:
-			if atomic.CompareAndSwapInt32((*int32)(unsafe.Pointer(&m.state)), n, n+1) {
+			if atomic.CompareAndSwapInt32(&m.state, n, n+1) {
 				return true
 			}
 		}
@@ -120,6 +118,7 @@ func (m *CASMutex) RLock(ctx context.Context) bool {
 				continue
 			}
 		}
+		// if in writeLock
 		select {
 		case <-ctx.Done():
 			return false
@@ -129,8 +128,8 @@ func (m *CASMutex) RLock(ctx context.Context) bool {
 }
 
 func (m *CASMutex) RUnlock() {
-	n := atomic.AddInt32((*int32)(unsafe.Pointer(&m.state)), -1)
-	switch m.getState(n) {
+	n := atomic.AddInt32(&m.state, -1)
+	switch m.mapState(n) {
 	case stateUndefined, stateWriteLock:
 		panic("RUnlock failed")
 	case stateNoLock:
@@ -138,8 +137,8 @@ func (m *CASMutex) RUnlock() {
 	}
 }
 
-// NewCASMutex returns CASMutex lock
-func NewCASMutex() *CASMutex {
+// New returns CASMutex lock
+func New() *CASMutex {
 	return &CASMutex{
 		state:       stateNoLock,
 		turnstile:   semaphore.NewWeighted(1),
