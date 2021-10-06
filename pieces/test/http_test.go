@@ -115,15 +115,57 @@ func MakeTlsConfig() *tls.Config {
 	return &tls.Config{
 		InsecureSkipVerify: true,
 		CipherSuites: []uint16{
-			tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
 			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
 			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
 			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_AES_128_GCM_SHA256,
-			tls.TLS_AES_256_GCM_SHA384,
 		},
 		MinVersion: tls.VersionTLS12,
+	}
+}
+
+// 把 context 的时间限制转化为 duration
+// timeout 为 0 表示不限制
+func contextToTimeout(waitCtx context.Context) time.Duration {
+	if deadline, ok := waitCtx.Deadline(); ok {
+		// now - deadline < 0
+		timeout := -time.Since(deadline)
+		if timeout > 0 {
+			return timeout
+		}
+	}
+	return 0
+}
+
+// CipherSuitesFromName 把 string 类型的转换为 cipher类型数组
+func CipherSuitesFromName(names []string) []*tls.CipherSuite {
+	m := make(map[string]*tls.CipherSuite, len(tls.CipherSuites()))
+	for _, cipher := range tls.CipherSuites() {
+		m[cipher.Name] = cipher
+	}
+
+	r := make([]*tls.CipherSuite, 0)
+	for _, n := range names {
+		if _, ok := m[n]; ok {
+			r = append(r, m[n])
+		}
+	}
+	return r
+}
+
+// WithContext 把只有 doDeadline 的 API 封装为可以使用 context
+func WithContext(doDeadline func(t time.Time) error, or func() error) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if deadline, ok := ctx.Deadline(); ok {
+			err := doDeadline(deadline)
+			// 因为 deadline 超时后 ctx.Done 不一定返回，
+			// 因此在超时时间到达之后，显式等待 ctx.Done 一定返回
+			if time.Until(deadline) <= 0 {
+				<-ctx.Done()
+			}
+			return err
+		} else {
+			return or()
+		}
 	}
 }
