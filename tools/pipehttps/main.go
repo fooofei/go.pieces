@@ -57,6 +57,20 @@ func WithDumpResp(w io.Writer) func(*http.Response) {
 	}
 }
 
+// cloneReqWithNewHost will clone http request from req, with updated host
+// host format is http://1.1.1.1:9090  not tail with '/'
+func cloneReqWithNewHost(ctx context.Context, req *http.Request, host string) (*http.Request, error) {
+	r1 := req.Clone(ctx)
+	r2, err := http.NewRequest(req.Method, fmt.Sprintf("%s%s", host, req.URL.Path), nil)
+	if err != nil {
+		return nil, err
+	}
+	r1.URL = r2.URL
+	r1.Host = r2.Host
+	r1.RequestURI = r2.RequestURI
+	return r1, nil
+}
+
 type serveFunc func(server *http.Server, listener net.Listener) error
 
 func serveHTTP() serveFunc {
@@ -116,44 +130,44 @@ func pipeResponse(resp *http.Response, w http.ResponseWriter) {
 		w.Header().Set(k, resp.Header.Get(k))
 	}
 	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
+	io.Copy(w, resp.Body)
 }
 
 // ServeHTTP 将会把请求 pipe 出去
-func (h *customizedHandler) ServeHTTP(w http.ResponseWriter, fromReq *http.Request) {
-	ctx, cancel := context.WithTimeout(h.gtx, time.Minute)
+func (h *customizedHandler) ServeHTTP(w http.ResponseWriter, req1 *http.Request) {
+	var (
+		ctx, cancel = context.WithTimeout(h.gtx, time.Minute)
+		count       = atomic.AddInt64(&h.Count, 1)
+		b           = bytes.NewBufferString("")
+		req2        *http.Request
+		err         error
+		rsp         *http.Response
+	)
 	defer cancel()
-	count := atomic.AddInt64(&h.Count, 1)
-	b := bytes.NewBufferString("")
 	defer func() {
 		fmt.Print(b.String())
 	}()
 
-	toReq := fromReq.Clone(ctx)
-	toReq.URL.Scheme = h.pair.To.Scheme
-
-	// 不能替换，有的同一个 ip 地址对应多个 host 域名
-	//toReq.Host = h.pair.To.Join()
-	toReq.URL.Host = toReq.Host
-
-	toReq.RequestURI = "" // must clear
-
-	_, _ = fmt.Fprintf(b, "---req %v----------from %v to %v----------------------------------------\n",
-		count, h.pair.From.URL(), h.pair.To.URL())
-	WithDumpReq(b)(toReq)
-	resp, err := h.clt.Do(toReq)
-	if err != nil {
-		_, _ = fmt.Fprintf(b, "error: <%T>%v\n", err, err)
+	if req2, err = cloneReqWithNewHost(ctx, req1, h.pair.To.URL()); err != nil {
+		fmt.Fprintf(b, "failed create request with error: <%T>%v\n", err, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_, _ = fmt.Fprintf(b, "---resp %v----------from %v to %v----------------------------------------\n",
+	fmt.Fprintf(b, "---req %v----------from %v to %v----------------------------------------\n",
 		count, h.pair.From.URL(), h.pair.To.URL())
-	WithDumpResp(b)(resp)
+	WithDumpReq(b)(req2)
+	if rsp, err = h.clt.Do(req2); err != nil {
+		fmt.Fprintf(b, "error: <%T>%v\n", err, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	fmt.Fprintf(b, "---resp %v----------from %v to %v----------------------------------------\n",
+		count, h.pair.From.URL(), h.pair.To.URL())
+	WithDumpResp(b)(rsp)
 	// 这个方法不是 pipe 作用，不符合预期
 	// _ = resp.Write(w)
-	pipeResponse(resp, w)
-	_ = resp.Body.Close()
+	pipeResponse(rsp, w)
+	rsp.Body.Close()
 }
 
 func parseURL(path string) (*service, error) {
