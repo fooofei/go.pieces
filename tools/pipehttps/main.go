@@ -29,19 +29,17 @@ import (
 // 可以让服务去请求这个文件的 HTTP 接口，然后我们帮他请求 HTTPS
 
 // mapper file format:
-// http://127.0.0.1:18100 https://example.com:1984
-// https://127.0.0.1:18101 https://example.com:1984
-
+// http://127.0.0.1:18100 https://example.com:1984+
 // WithDumpReq will dump request as http format
 func WithDumpReq(w io.Writer) func(*http.Request) {
 	return func(req *http.Request) {
 		// dump must before .Do()
 		content, err := httputil.DumpRequest(req, true)
 		if err != nil {
-			_, _ = fmt.Fprintf(w, "error: <%T>%v\n", err, err)
+			fmt.Fprintf(w, "error: <%T>%v\n", err, err)
 			return
 		}
-		_, _ = fmt.Fprintf(w, "%s\n", content)
+		fmt.Fprintf(w, "%s\n", content)
 	}
 }
 
@@ -50,15 +48,16 @@ func WithDumpResp(w io.Writer) func(*http.Response) {
 	return func(resp *http.Response) {
 		content, err := httputil.DumpResponse(resp, true)
 		if err != nil {
-			_, _ = fmt.Fprintf(w, "error: <%T>%v\n", err, err)
+			fmt.Fprintf(w, "error: <%T>%v\n", err, err)
 			return
 		}
-		_, _ = fmt.Fprintf(w, "%s\n", content)
+		fmt.Fprintf(w, "%s\n", content)
 	}
 }
 
 // cloneReqWithNewHost will clone http request from req, with updated host
 // host format is http://1.1.1.1:9090  not tail with '/'
+// 这个很重要 找了很久如何只更新连接地址，这个比较理想
 func cloneReqWithNewHost(ctx context.Context, req *http.Request, host string) (*http.Request, error) {
 	r1 := req.Clone(ctx)
 	r2, err := http.NewRequest(req.Method, fmt.Sprintf("%s%s", host, req.URL.Path), nil)
