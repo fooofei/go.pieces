@@ -28,6 +28,9 @@ import (
 // 如果一个微服务请求 HTTPS 接口 发生了错误，但是不能抓包定位
 // 可以让服务去请求这个文件的 HTTP 接口，然后我们帮他请求 HTTPS
 
+// 对比下这个库 https://github.com/projectdiscovery/proxify
+// 代码质量不好，对于协程的等待，关闭，不优雅
+
 // mapper file format:
 // http://127.0.0.1:18100 https://example.com:1984+
 // WithDumpReq will dump request as http format

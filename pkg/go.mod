@@ -1,6 +1,6 @@
 module github.com/fooofei/go_pieces/pkg
 
-go 1.16
+go 1.18
 
 require (
 	github.com/kbinani/win v0.3.0
