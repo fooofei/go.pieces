@@ -18,7 +18,6 @@ type udpingOp struct {
 func (t *udpingOp) Ping(waitCtx context.Context, raddr string) (time.Duration, error) {
 	var err error
 	noDeadline := time.Time{}
-	_ = raddr
 
 	start := time.Now()
 	_, err = t.Cnn.Write(t.Pld)
@@ -29,9 +28,9 @@ func (t *udpingOp) Ping(waitCtx context.Context, raddr string) (time.Duration, e
 	if !ok {
 		dl = time.Now().Add(time.Millisecond * 950)
 	}
-	_ = t.Cnn.SetReadDeadline(dl)
+	t.Cnn.SetReadDeadline(dl)
 	_, err = t.Cnn.Read(t.Buf)
-	_ = t.Cnn.SetReadDeadline(noDeadline)
+	t.Cnn.SetReadDeadline(noDeadline)
 	return time.Now().Sub(start), err
 }
 
@@ -44,7 +43,6 @@ func (t *udpingOp) Ready(ctx context.Context, raddr string) error {
 	}
 	t.Buf = make([]byte, 100*1024)
 	t.Pld, err = hex.DecodeString("hello")
-	_ = err
 	return nil
 }
 
