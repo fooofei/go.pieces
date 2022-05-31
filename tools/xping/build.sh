@@ -6,6 +6,7 @@ function compile() {
     name=$1
     echo "compiling $name"
     cd $SCRIPTPATH/$name
+    go mod vendor
     GOOS=linux GOARCH=amd64 go build -mod=vendor -tags netgo -v -o $name-linux-amd64
     GOOS=linux GOARCH=arm64 go build -mod=vendor -tags netgo -v -o $name-linux-arm64
     GOOS=windows GOARCH=amd64 go build -mod=vendor -tags netgo -v -o $name-windows.exe
