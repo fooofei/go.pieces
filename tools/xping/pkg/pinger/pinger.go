@@ -86,12 +86,12 @@ pingLoop:
 		durNanoSec := dur.Nanoseconds()
 		durMillSec := float64(durNanoSec) / 1000 / 1000
 
-		_, _ = fmt.Fprintf(bb, "> [%05v][%v] %v: %.2f ms",
+		fmt.Fprintf(bb, "> [%05v][%v] %v: %.2f ms",
 			count, start.Format(TimeFmt), wkCtx.RAddr, durMillSec)
 		wkCtx.Sent += 1
 		wkCtx.Durs = append(wkCtx.Durs, dur)
 		if err != nil {
-			_, _ = fmt.Fprintf(bb, " err=<%T> %v", err, err)
+			fmt.Fprintf(bb, " err=<%T> %v", err, err)
 		} else {
 			wkCtx.Received += 1
 		}
@@ -183,28 +183,28 @@ func summary(sent int64, received int64, durs []time.Duration) string {
 	w := &bytes.Buffer{}
 	statsData := stats2.LoadRawData(durs)
 
-	_, _ = fmt.Fprintf(w, " Sent = %v, ", sent)
-	_, _ = fmt.Fprintf(w, " Received = %v ", received)
-	_, _ = fmt.Fprintf(w, "(%.1f%s)\n",
+	fmt.Fprintf(w, " Sent = %v, ", sent)
+	fmt.Fprintf(w, " Received = %v ", received)
+	fmt.Fprintf(w, "(%.1f%s)\n",
 		float64(received*100)/float64(sent), "%%")
 
 	min, _ := stats2.Min(statsData)
-	_, _ = fmt.Fprintf(w, " Minimum = %.2f ms,", min/1000/1000)
+	fmt.Fprintf(w, " Minimum = %.2f ms,", min/1000/1000)
 	max, _ := stats2.Max(statsData)
-	_, _ = fmt.Fprintf(w, " Maximum = %.2f ms\n", max/1000/1000)
+	fmt.Fprintf(w, " Maximum = %.2f ms\n", max/1000/1000)
 	ave, _ := stats2.Mean(statsData)
-	_, _ = fmt.Fprintf(w, " Average = %.2f ms,", ave/1000/1000)
+	fmt.Fprintf(w, " Average = %.2f ms,", ave/1000/1000)
 	med, _ := stats2.Median(statsData)
-	_, _ = fmt.Fprintf(w, " Median = %.2f ms\n", med/1000/1000)
+	fmt.Fprintf(w, " Median = %.2f ms\n", med/1000/1000)
 
 	percentile90, _ := stats2.Percentile(statsData, float64(90))
-	_, _ = fmt.Fprintf(w, " 90%s of Request <= %.2f ms\n",
+	fmt.Fprintf(w, " 90%s of Request <= %.2f ms\n",
 		"%%", percentile90/1000/1000)
 	percentile75, _ := stats2.Percentile(statsData, float64(75))
-	_, _ = fmt.Fprintf(w, " 75%s of Request <= %.2f ms\n",
+	fmt.Fprintf(w, " 75%s of Request <= %.2f ms\n",
 		"%%", percentile75/1000/1000)
 	percentile50, _ := stats2.Percentile(statsData, float64(50))
-	_, _ = fmt.Fprintf(w, " 50%s of Request <= %.2f ms\n",
+	fmt.Fprintf(w, " 50%s of Request <= %.2f ms\n",
 		"%%", percentile50/1000/1000)
 	return w.String()
 }
