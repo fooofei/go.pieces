@@ -24,6 +24,15 @@ EOF
   popd
 }
 
+function get_montanaflynn_stats() {
+  pushd "${SCRIPTPATH}"
+  git clone https://github.com/montanaflynn/stats.git
+  popd
+}
+
+get_kbinani_win
+get_montanaflynn_stats
+
 compile httping
 compile tcping
 compile udping
