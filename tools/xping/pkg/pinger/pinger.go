@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	stats2 "github.com/montanaflynn/stats"
+	stats2 "github.com/fooofei/stats"
 )
 
 // The framework of pingable
