@@ -1,6 +1,6 @@
 module github.com/fooofei/go_pieces/tools/ping
 
-go 1.16
+go 1.18
 
 replace github.com/fooofei/go_pieces/pkg => ../../pkg
 
