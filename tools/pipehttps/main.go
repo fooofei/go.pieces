@@ -97,6 +97,12 @@ func listenAndServe(ctx context.Context, addr string, handler http.Handler, opt 
 	return opt(serv, ln)
 }
 
+func partitialListenFunc(ctx context.Context, addr string, handler http.Handler, opt serveFunc) func() error {
+	return func() error {
+		return listenAndServe(ctx, addr, handler, opt)
+	}
+}
+
 type service struct {
 	Scheme string
 	Host   string
@@ -119,11 +125,11 @@ type servicePair struct {
 	To   *service
 }
 
-type customizedHandler struct {
+type servicePairHttpHandler struct {
 	logger logr.Logger
 	clt    *http.Client
 	gtx    context.Context
-	Count  int64
+	seq    *int64
 	pair   servicePair
 }
 
@@ -136,10 +142,10 @@ func pipeResponse(resp *http.Response, w http.ResponseWriter) {
 }
 
 // ServeHTTP 将会把请求 pipe 出去
-func (h *customizedHandler) ServeHTTP(w http.ResponseWriter, req1 *http.Request) {
+func (h *servicePairHttpHandler) ServeHTTP(w http.ResponseWriter, req1 *http.Request) {
 	var (
 		ctx, cancel = context.WithTimeout(h.gtx, time.Minute)
-		count       = atomic.AddInt64(&h.Count, 1)
+		count       = atomic.AddInt64(h.seq, 1)
 		b           = bytes.NewBufferString("")
 		req2        *http.Request
 		err         error
@@ -223,37 +229,18 @@ func parseMapper(filePath string) ([]servicePair, error) {
 	return pairs, nil
 }
 
-func main() {
-	var mapperFilePath string
-	var certsDir string
-	flag.StringVar(&mapperFilePath, "mapper", "mapper.txt", "The host:port mapper file path")
-	flag.StringVar(&certsDir, "certs", "", "The server.cert.pem and server.key.pem file dir")
-	flag.Parse()
-	logger := stdr.New(stdlog.New(os.Stdout, "", stdlog.Lshortfile|stdlog.LstdFlags))
-	logger = logger.WithValues("pid", os.Getpid())
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-
+func pairs2Listens(ctx context.Context, logger logr.Logger, pairs []servicePair, httpsCertsDir string) {
 	var tr *http.Transport
+	var err error
+	var httpSequence int64
+	var errCh = make(chan error, 100)
 	trf := http.DefaultTransport.(*http.Transport)
 	tr = trf.Clone()
 	if tr.TLSClientConfig == nil {
 		tr.TLSClientConfig = &tls.Config{}
 	}
-
-	proxy := func(_ *http.Request) (*url.URL, error) {
-		return url.Parse("http://127.0.0.1:3128")
-	}
-	_ = proxy
-	// 关闭使用代理
 	tr.Proxy = nil
-	tr.TLSClientConfig.InsecureSkipVerify = true // 我们的目的是定位问题 忽略证书校验
-
-	pairs, err := parseMapper(mapperFilePath)
-	if err != nil {
-		panic(err)
-	}
+	tr.TLSClientConfig.InsecureSkipVerify = true // 我们的目的是定位问题 忽略证书校验 我们访问其他地址不校验
 
 	for _, v := range pairs {
 		var value string
@@ -267,8 +254,9 @@ func main() {
 			value = net.JoinHostPort("", v.From.Port)
 		}
 		l := logger.WithValues("from", v.From.URL(), "to", v.To.URL())
-		ch := &customizedHandler{
-			logger: l.WithName("customizedHandler"),
+
+		ch := &servicePairHttpHandler{
+			logger: l.WithName("servicePairHttpHandler"),
 			gtx:    ctx,
 			clt: &http.Client{
 				Transport:     tr,
@@ -276,21 +264,56 @@ func main() {
 				Jar:           nil,
 				Timeout:       0,
 			},
-			Count: 0,
-			pair:  v,
+			seq:  &httpSequence,
+			pair: v,
 		}
 		m := http.NewServeMux()
 		m.Handle("/", ch)
+
 		l.Info("Serve HTTP", "addr", value)
+		var opt serveFunc
 		switch v.From.Scheme {
 		case "https":
 			// https 要本地预置证书文件
-			a := filepath.Join(certsDir, "server.cert.pem")
-			b := filepath.Join(certsDir, "server.key.pem")
-			go listenAndServe(ctx, value, m, serveHTTPS(a, b))
+			a := filepath.Join(httpsCertsDir, "server.cert.pem")
+			b := filepath.Join(httpsCertsDir, "server.key.pem")
+			opt = serveHTTPS(a, b)
 		case "http":
-			go listenAndServe(ctx, value, m, serveHTTP())
+			opt = serveHTTP()
+		default:
+			panic("not support scheme " + v.From.Scheme)
 		}
+
+		go func(pfn func() error) {
+			if err = pfn(); err != nil {
+				errCh <- err
+			}
+		}(partitialListenFunc(ctx, value, m, opt))
 	}
-	<-ctx.Done()
+
+	select {
+	case <-ctx.Done():
+	case err = <-errCh:
+		panic(err)
+	}
+}
+
+func main() {
+	var mapperFilePath string
+	var certsDir string
+	flag.StringVar(&mapperFilePath, "mapper", "mapper.txt", "The host:port mapper file path")
+	flag.StringVar(&certsDir, "certs", "", "The server.cert.pem and server.key.pem file dir")
+	flag.Parse()
+	logger := stdr.New(stdlog.New(os.Stdout, "", stdlog.Lshortfile|stdlog.LstdFlags))
+	logger = logger.WithValues("pid", os.Getpid())
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	pairs, err := parseMapper(mapperFilePath)
+	if err != nil {
+		panic(err)
+	}
+
+	pairs2Listens(ctx, logger, pairs, certsDir)
 }
