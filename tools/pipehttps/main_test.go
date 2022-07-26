@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/fooofei/go_pieces/tools/pipehttps/url"
 	"reflect"
 	"testing"
 )
@@ -12,21 +13,21 @@ func Test_parseURL(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    *service
+		want    *url.Url
 		wantErr bool
 	}{
 		{name: "test1",
 			args: args{path: "http://1.1.1.1"},
-			want: &service{
+			want: &url.Url{
 				Scheme: "http",
 				Host:   "1.1.1.1",
-				Port:   "",
+				Port:   "80",
 			},
 			wantErr: false,
 		},
 		{name: "test2",
 			args: args{path: "http://1.1.1.1:80"},
-			want: &service{
+			want: &url.Url{
 				Scheme: "http",
 				Host:   "1.1.1.1",
 				Port:   "80",
@@ -35,7 +36,7 @@ func Test_parseURL(t *testing.T) {
 		},
 		{name: "test3",
 			args: args{path: "http://1.1.1.1:234234"},
-			want: &service{
+			want: &url.Url{
 				Scheme: "http",
 				Host:   "1.1.1.1",
 				Port:   "234234",
@@ -44,26 +45,26 @@ func Test_parseURL(t *testing.T) {
 		},
 		{name: "test4",
 			args: args{path: "http://www.demo.com"},
-			want: &service{
+			want: &url.Url{
 				Scheme: "http",
 				Host:   "www.demo.com",
-				Port:   "",
+				Port:   "80",
 			},
 			wantErr: false,
 		},
 		{name: "test5",
 			args: args{path: "https://www.demo.com"},
-			want: &service{
+			want: &url.Url{
 				Scheme: "https",
 				Host:   "www.demo.com",
-				Port:   "",
+				Port:   "443",
 			},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseURL(tt.args.path)
+			got, err := url.Parse(tt.args.path)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("parseURL() error = %v, wantErr %v", err, tt.wantErr)
 				return
