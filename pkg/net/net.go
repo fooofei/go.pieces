@@ -7,21 +7,21 @@ import (
 )
 
 // CloseWhenContext will wait to close `toBeClose` when ctx.Done()
-// if `toBeClose` closed, the returned context will Done()
-// if you cannot wait, you can close the returned stop func
+// or you can close it by call the returned cancel()
+// when `toBeClose` is closed, the returned context will be done
 func CloseWhenContext(ctx context.Context, toBeClose io.Closer) (context.Context, context.CancelFunc) {
-	noWait := make(chan bool, 1)
-	ctx2,cancel2 := context.WithCancel(ctx)
+	var noWait = make(chan bool, 1)
+	var ctx2, cancel2 = context.WithCancel(ctx)
 	go func() {
 		select {
 		case <-noWait:
 		case <-ctx.Done():
 		}
-		_ = toBeClose.Close()
+		toBeClose.Close()
 		cancel2()
 	}()
-	cancelOnce := &sync.Once{}
-	cancelFunc := func() {
+	var cancelOnce = &sync.Once{}
+	var cancelFunc = func() {
 		cancelOnce.Do(func() {
 			close(noWait)
 		})
