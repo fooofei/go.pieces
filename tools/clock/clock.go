@@ -12,7 +12,6 @@ import (
 
 func clock() {
 	tick := time.Tick(time.Second)
-
 	for {
 		select {
 		case <-tick:
@@ -34,3 +33,6 @@ func main() {
 	log.SetPrefix(fmt.Sprintf("pid= %v ", os.Getpid()))
 	clock()
 }
+
+// example
+// pid= 10100 local= 2022-10-05T16:03:17+08:00 utc= 2022-10-05T08:03:17Z unix= 1664956997 unixNano= 1664956997657023800
