@@ -3,16 +3,16 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"os"
-	"time"
 
-	"github.com/fooofei/tools/xboom"
+	"github.com/fooofei/go_pieces/tools/xboom"
 )
 
 // 测试一个 HTTP 服务的 Performance
 
-type httpBoomOp struct {
+type httpBoom struct {
 	Headers map[string]string
 	Pld     []byte
 	Addr    string
@@ -20,31 +20,30 @@ type httpBoomOp struct {
 	HttpClient *http.Client
 }
 
-func (hb *httpBoomOp) LoadBullet(waitCtx context.Context, addr string) error {
+func (hb *httpBoom) LoadBullet(waitCtx context.Context, addr string) error {
 	hb.HttpClient = &http.Client{}
 	hb.Addr = addr
 	return nil
 }
 
-func (hb *httpBoomOp) Shoot(waitCtx context.Context) (time.Duration, error) {
-	start := time.Now()
-	req, err := http.NewRequest("POST", hb.Addr, bytes.NewReader(hb.Pld))
+func (hb *httpBoom) Shoot(waitCtx context.Context) error {
+	var req, err = http.NewRequestWithContext(waitCtx, "POST", hb.Addr, bytes.NewReader(hb.Pld))
 	if err != nil {
-		return time.Since(start), err
+		return err
 	}
 	for k, v := range hb.Headers {
 		req.Header.Set(k, v)
 	}
-	req = req.WithContext(waitCtx)
-	resp, err := hb.HttpClient.Do(req)
-	if err != nil {
-		return time.Since(start), err
+	var resp *http.Response
+	if resp, err = hb.HttpClient.Do(req); err != nil {
+		return err
 	}
-	_ = resp.Body.Close()
-	return time.Since(start), nil
+	io.ReadAll(resp.Body)
+	resp.Body.Close()
+	return nil
 }
 
-func (hb *httpBoomOp) Close() error {
+func (hb *httpBoom) Close() error {
 	hb.HttpClient = nil
 	return nil
 }
@@ -54,7 +53,7 @@ func main() {
 	os.Args = append(os.Args, "-addr", addr)
 	os.Args = append(os.Args, "-gocnt", "100")
 
-	hb := &httpBoomOp{}
+	hb := &httpBoom{}
 	hb.Headers = make(map[string]string, 0)
 	hb.Headers["Content-Type"] = "application/json"
 	hb.Pld = []byte(`{"sort":[{"timestamp":{"order":"desc"}}],"size":300}`)
