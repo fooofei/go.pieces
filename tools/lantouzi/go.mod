@@ -1,21 +1,28 @@
 module github.com/fooofei/go_pieces/tools/lantouzi
 
-go 1.13
+go 1.19
 
 require (
-	github.com/PuerkitoBio/goquery v1.5.0 // indirect
-	github.com/antchfx/htmlquery v1.2.0 // indirect
-	github.com/antchfx/xmlquery v1.2.1 // indirect
-	github.com/antchfx/xpath v1.1.2 // indirect
-	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gocolly/colly v1.2.0
-	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
-	github.com/google/go-cmp v0.3.1 // indirect
+	gotest.tools v2.2.0+incompatible
+)
+
+require (
+	github.com/PuerkitoBio/goquery v1.8.0 // indirect
+	github.com/andybalholm/cascadia v1.3.1 // indirect
+	github.com/antchfx/htmlquery v1.2.5 // indirect
+	github.com/antchfx/xmlquery v1.3.12 // indirect
+	github.com/antchfx/xpath v1.2.1 // indirect
+	github.com/gobwas/glob v0.2.3 // indirect
+	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/google/go-cmp v0.5.5 // indirect
 	github.com/kennygrant/sanitize v1.2.4 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/saintfish/chardet v0.0.0-20120816061221-3af4cd4741ca // indirect
-	github.com/temoto/robotstxt v1.1.1 // indirect
-	golang.org/x/net v0.0.0-20191207000613-e7e4b65ae663 // indirect
-	google.golang.org/appengine v1.6.5 // indirect
-	gotest.tools v2.2.0+incompatible
+	github.com/temoto/robotstxt v1.1.2 // indirect
+	golang.org/x/net v0.0.0-20221004154528-8021a29435af // indirect
+	golang.org/x/text v0.3.7 // indirect
+	google.golang.org/appengine v1.6.7 // indirect
+	google.golang.org/protobuf v1.28.1 // indirect
 )
