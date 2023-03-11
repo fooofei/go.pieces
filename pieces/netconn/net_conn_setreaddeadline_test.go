@@ -2,10 +2,8 @@ package netonn
 
 import (
 	"fmt"
-	"github.com/go-logr/logr"
-	"github.com/go-logr/stdr"
 	"github.com/stretchr/testify/require"
-	"log"
+	"golang.org/x/exp/slog"
 	"net"
 	"os"
 	"sync"
@@ -13,7 +11,7 @@ import (
 	"time"
 )
 
-func writeToConn(t *testing.T, logger logr.Logger, addr string) {
+func writeToConn(t *testing.T, logger *slog.Logger, addr string) {
 	cnn, err := net.Dial("tcp", addr)
 	require.NoError(t, err)
 
@@ -44,8 +42,8 @@ func TestDeadlineNoRead(t *testing.T) {
 	// [2] after 3s write
 	// [1] Read() something
 
-	rootLogger := stdr.New(log.New(os.Stdout, "", log.LstdFlags))
-	logger := rootLogger.WithName("[Read]")
+	rootLogger := slog.New(slog.NewJSONHandler(os.Stdout))
+	logger := rootLogger.With("[Read]")
 	addr := "127.0.0.1:3389"
 	lsnCnn, err := net.Listen("tcp", addr)
 	require.NoError(t, err)
@@ -54,7 +52,7 @@ func TestDeadlineNoRead(t *testing.T) {
 	wait := &sync.WaitGroup{}
 	wait.Add(1)
 	go func() {
-		writeToConn(t, rootLogger.WithName("[write]"), addr)
+		writeToConn(t, rootLogger.With("[write]"), addr)
 		wait.Done()
 	}()
 
@@ -97,8 +95,8 @@ func TestDeadlineNoRead(t *testing.T) {
 // 测试结果：无法再继续读取
 // 修复方式: 重新设置新的更长的 deadline 或者清除 deadline
 func TestDeadlineReadSome(t *testing.T) {
-	rootLogger := stdr.New(log.New(os.Stdout, "", log.LstdFlags))
-	logger := rootLogger.WithName("[Read]")
+	rootLogger := slog.New(slog.NewJSONHandler(os.Stdout))
+	logger := rootLogger.With("[Read]")
 	addr := "127.0.0.1:3389"
 	lsnCnn, err := net.Listen("tcp", addr)
 	require.NoError(t, err)
@@ -107,7 +105,7 @@ func TestDeadlineReadSome(t *testing.T) {
 	wait := &sync.WaitGroup{}
 	wait.Add(1)
 	go func() {
-		writeToConn(t, rootLogger.WithName("[write]"), addr)
+		writeToConn(t, rootLogger.With("[write]"), addr)
 		wait.Done()
 	}()
 
