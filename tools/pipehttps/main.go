@@ -5,10 +5,8 @@ import (
 	"crypto/tls"
 	"flag"
 	"github.com/fooofei/go_pieces/tools/pipehttps/url"
-	"github.com/go-logr/logr"
-	"github.com/go-logr/stdr"
+	"golang.org/x/exp/slog"
 	"io"
-	stdlog "log"
 	"net"
 	"net/http"
 	"os"
@@ -65,15 +63,15 @@ type globalContext struct {
 	SvrTlsCfg       *tls.Config     // used for http server
 }
 
-func listenChainList(ctx context.Context, logger logr.Logger, chains []url.Chain, gc *globalContext) {
+func listenChainList(ctx context.Context, logger *slog.Logger, chains []url.Chain, gc *globalContext) {
 	var err error
 	var errCh = make(chan error, 100)
 
 	for _, v := range chains {
-		l := logger.WithValues("from", v.From.URL(), "to", v.To.URL())
+		l := logger.With("from", v.From.URL(), "to", v.To.URL())
 
 		ch := &ChainHandler{
-			logger: l.WithName("ChainHandler"),
+			logger: l.WithGroup("ChainHandler"),
 			gtx:    ctx,
 			clt: &http.Client{
 				Transport:     gc.Transport,
@@ -144,9 +142,7 @@ func main() {
 	flag.StringVar(&mapperFilePath, "mapper", "mapper.txt", "The host:port mapper file path")
 	flag.StringVar(&certsDir, "certs", "", "The server.cert.pem and server.key.pem file dir")
 	flag.Parse()
-	var logger = stdr.New(stdlog.New(os.Stdout, "", stdlog.Lshortfile|stdlog.LstdFlags))
-	logger = logger.WithValues("pid", os.Getpid())
-
+	var logger = slog.New(slog.NewJSONHandler(os.Stderr)).With("pid", os.Getpid())
 	var ctx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 

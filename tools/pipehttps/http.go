@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
+	"strings"
 )
 
 // WithDumpReq will dump request as http format
@@ -24,12 +27,28 @@ func WithDumpReq(w io.Writer) func(*http.Request) {
 // WithDumpResp will dump response as http format
 func WithDumpResp(w io.Writer) func(*http.Response) {
 	return func(resp *http.Response) {
-		content, err := httputil.DumpResponse(resp, true)
+		// body 可能为 gzip 压缩，参数传递 false， 不输出
+		content, err := httputil.DumpResponse(resp, false)
 		if err != nil {
 			fmt.Fprintf(w, "error: <%T>%v\n", err, err)
 			return
 		}
-		fmt.Fprintf(w, "%s\n", content)
+		fmt.Fprintf(w, "%s", content)
+		// 保留原始body，对拷贝份进行 gzip 解压读取
+		var b, _ = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		resp.Body = io.NopCloser(bytes.NewReader(b))
+		var bodyReader io.Reader = bytes.NewReader(b)
+		if strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
+			if r, err := gzip.NewReader(bytes.NewReader(b)); err == nil {
+				bodyReader = r
+				defer func() {
+					r.Close()
+				}()
+			}
+		}
+		io.Copy(w, bodyReader)
+		fmt.Fprintf(w, "\n")
 	}
 }
 

@@ -1,8 +1,5 @@
 module github.com/fooofei/go_pieces/tools/pipehttps
 
-go 1.18
+go 1.20
 
-require (
-	github.com/go-logr/logr v1.2.3
-	github.com/go-logr/stdr v1.2.2
-)
+require golang.org/x/exp v0.0.0-20230310171629-522b1b587ee0

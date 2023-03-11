@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/fooofei/go_pieces/tools/pipehttps/url"
-	"github.com/go-logr/logr"
+	"golang.org/x/exp/slog"
 	"io"
 	"net/http"
 	"sync/atomic"
@@ -13,7 +13,7 @@ import (
 )
 
 type ChainHandler struct {
-	logger logr.Logger
+	logger *slog.Logger
 	clt    *http.Client
 	gtx    context.Context
 	seq    *int64
@@ -59,6 +59,7 @@ func (h *ChainHandler) ServeHTTP(w http.ResponseWriter, req1 *http.Request) {
 	fmt.Fprintf(b, "---resp %v----------from %v to %v----------------------------------------\n",
 		count, h.chain.From.URL(), h.chain.To.URL())
 	WithDumpResp(b)(rsp)
+
 	// 这个方法不是 pipe 作用，不符合预期
 	// _ = resp.Write(w)
 	pipeResponse(rsp, w)
