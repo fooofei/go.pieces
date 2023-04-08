@@ -140,7 +140,7 @@ func main() {
 	var mapperFilePath string
 	var certsDir string
 	flag.StringVar(&mapperFilePath, "mapper", "mapper.txt", "The host:port mapper file path")
-	flag.StringVar(&certsDir, "certs", "", "The server.cert.pem and server.key.pem file dir")
+	flag.StringVar(&certsDir, "certs", "./certs", "The server.cert.pem and server.key.pem file dir")
 	flag.Parse()
 	var logger = slog.New(slog.NewJSONHandler(os.Stderr)).With("pid", os.Getpid())
 	var ctx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
