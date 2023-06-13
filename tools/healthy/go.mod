@@ -1,10 +1,12 @@
 module github.com/fooofei/go_pieces/tools/healthy
 
-go 1.16
+go 1.21
 
 require (
-	github.com/fooofei/go_pieces/pkg v0.0.0-00010101000000-000000000000
-	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
+	github.com/fooofei/go_pieces/pkg v0.0.0-20230408021751-72c996e52f52
+	golang.org/x/net v0.10.0
 )
+
+require golang.org/x/sys v0.9.0 // indirect
 
 replace github.com/fooofei/go_pieces/pkg => ../../pkg

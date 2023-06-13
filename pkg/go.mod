@@ -1,10 +1,10 @@
 module github.com/fooofei/go_pieces/pkg
 
-go 1.20
+go 1.21
 
 require (
 	github.com/kbinani/win v0.3.0
-	golang.org/x/sync v0.1.0
+	golang.org/x/sync v0.2.0
 	gotest.tools v2.3.0+incompatible
 )
 
