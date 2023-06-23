@@ -37,7 +37,6 @@ function get_montanaflynn_stats() {
 }
 
 get_kbinani_win || true
-get_montanaflynn_stats || true
 
 compile_target http
 compile_target tcp

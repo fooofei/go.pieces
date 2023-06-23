@@ -5,7 +5,6 @@ go 1.21
 replace (
 	github.com/fooofei/go_pieces/pkg => ../../pkg
 	github.com/kbinani/win => ./win
-	github.com/montanaflynn/stats => ./stats
 )
 
 require (
