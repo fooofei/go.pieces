@@ -5,11 +5,9 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/miekg/dns"
 )
 
@@ -17,8 +15,8 @@ import (
 
 func serveDnsServer(ctx context.Context, srv *Server) {
 	// attach request handler func
-	for _, rec := range srv.Records {
-		dns.HandleFunc(rec.Domain, srv.handleRequest)
+	for domain, _ := range srv.Records {
+		dns.HandleFunc(domain, srv.handleRequest)
 	}
 
 	server := &dns.Server{Addr: srv.Addr, Net: srv.Net}
@@ -43,15 +41,11 @@ func serveDnsServer(ctx context.Context, srv *Server) {
 }
 
 func main() {
-	var conf = &Config{}
-	fp, _ := os.Executable()
-	fp = filepath.Dir(fp)
-	fp = filepath.Join(fp, "conf.toml")
-	var _, err = toml.DecodeFile(fp, conf)
-	if err != nil {
-		panic(err)
+	var srv = &Server{
+		Records: map[string]string{"a.b.com.": "127.0.0.1"},
+		Addr:    ":5354",
+		Net:     "udp",
 	}
-	var srv = &Server{Records: conf.ToMap(), Addr: conf.Addr, Net: conf.Net}
 	var ctx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	serveDnsServer(ctx, srv)

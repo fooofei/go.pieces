@@ -7,7 +7,7 @@ import (
 )
 
 type Server struct {
-	Records map[string]*Record // key:domain
+	Records map[string]string // key:domain value ip
 	Addr    string
 	Net     string
 }
@@ -28,12 +28,14 @@ func (srv *Server) parseQuery(m *dns.Msg) {
 	for _, q := range m.Question {
 		switch q.Qtype {
 		case dns.TypeA:
-			log.Printf("Query for %s\n", q.Name)
+
 			var rec, exists = srv.Records[q.Name]
 			if !exists {
+				log.Printf("failed query for %s not exists\n", q.Name)
 				continue
 			}
-			var rr, err = dns.NewRR(fmt.Sprintf("%s A %s", q.Name, rec.Host))
+			var rr, err = dns.NewRR(fmt.Sprintf("%s A %s", q.Name, rec))
+			log.Printf("query for %v->%v err=%v\n", q.Name, rec, err)
 			if err == nil {
 				m.Answer = append(m.Answer, rr)
 			}
