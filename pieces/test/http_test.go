@@ -20,6 +20,10 @@ func sampleHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "this is a test")
 }
 
+//
+// 这篇文章介绍如何正确 shutdown，就像下面的代码这样 https://dev.to/mokiat/proper-http-shutdown-in-go-3fji
+//
+
 func setupServer(ctx context.Context, logger *slog.Logger) error {
 	metricAddr := ":8888"
 	// 构建一个局部 http server，不使用 http 包的默认 server
@@ -50,6 +54,7 @@ func setupServer(ctx context.Context, logger *slog.Logger) error {
 		return err
 	case <-ctx.Done():
 		logger.Info("shutdown server")
+		// 这里可以继续增强，使用自定义超时的 context，不使用当前的 ctx，使用当前的 ctx 会立刻退出 shutdown
 		_ = server.Shutdown(ctx)
 	}
 	return err
