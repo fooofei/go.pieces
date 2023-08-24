@@ -25,7 +25,10 @@ func serveDnsServer(ctx context.Context, srv *Server) {
 	var errCh = make(chan error, 1)
 	go func() {
 		var err = server.ListenAndServe()
-		errCh <- err
+		if err != nil {
+			errCh <- err
+		}
+		close(errCh)
 	}()
 
 	select {
@@ -38,12 +41,13 @@ func serveDnsServer(ctx context.Context, srv *Server) {
 	var subCtx, cancel = context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	server.ShutdownContext(subCtx)
+	<-errCh
 }
 
 func main() {
 	var srv = &Server{
 		Records: map[string]string{"a.b.com.": "127.0.0.1"},
-		Addr:    ":5354",
+		Addr:    ":53",
 		Net:     "udp",
 	}
 	var ctx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
