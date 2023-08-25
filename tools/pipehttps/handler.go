@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/fooofei/go_pieces/tools/pipehttps/url"
-	"golang.org/x/exp/slog"
 	"io"
 	"net/http"
 	"sync/atomic"
@@ -13,11 +12,10 @@ import (
 )
 
 type ChainHandler struct {
-	logger *slog.Logger
-	clt    *http.Client
-	gtx    context.Context
-	seq    *int64
-	chain  url.Chain
+	clt   *http.Client
+	gtx   context.Context
+	seq   *int64
+	chain url.Chain
 }
 
 func pipeResponse(resp *http.Response, w http.ResponseWriter) {

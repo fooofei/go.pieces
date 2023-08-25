@@ -5,8 +5,9 @@ import (
 	"crypto/tls"
 	"flag"
 	"github.com/fooofei/go_pieces/tools/pipehttps/url"
-	"golang.org/x/exp/slog"
 	"io"
+	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -26,15 +27,19 @@ import (
 
 type serveFunc func(server *http.Server, listener net.Listener) error
 
-func serveHTTP() serveFunc {
+func serveHTTP(logWriter io.Writer) serveFunc {
 	return func(server *http.Server, listener net.Listener) error {
+		// add a tail blank for prefix
+		server.ErrorLog = log.New(logWriter, "net/http/server ", log.Lshortfile|log.LstdFlags)
 		return server.Serve(listener)
 	}
 }
 
-func serveHTTPS(certFile, keyFile string, tlsConfig *tls.Config) serveFunc {
+func serveHTTPS(certFile, keyFile string, tlsConfig *tls.Config, logWriter io.Writer) serveFunc {
 	return func(server *http.Server, listener net.Listener) error {
 		server.TLSConfig = tlsConfig
+		// add a tail blank for prefix
+		server.ErrorLog = log.New(logWriter, "net/http/server ", log.Lshortfile|log.LstdFlags)
 		return server.ServeTLS(listener, certFile, keyFile)
 	}
 }
@@ -63,7 +68,7 @@ type globalContext struct {
 	SvrTlsCfg       *tls.Config     // used for http server
 }
 
-func listenChainList(ctx context.Context, logger *slog.Logger, chains []url.Chain, gc *globalContext) {
+func listenChainList(ctx context.Context, logger *slog.Logger, logWriter io.Writer, chains []url.Chain, gc *globalContext) {
 	var err error
 	var errCh = make(chan error, 100)
 
@@ -71,8 +76,7 @@ func listenChainList(ctx context.Context, logger *slog.Logger, chains []url.Chai
 		l := logger.With("from", v.From.URL(), "to", v.To.URL())
 
 		ch := &ChainHandler{
-			logger: l.WithGroup("ChainHandler"),
-			gtx:    ctx,
+			gtx: ctx,
 			clt: &http.Client{
 				Transport:     gc.Transport,
 				CheckRedirect: nil,
@@ -87,12 +91,13 @@ func listenChainList(ctx context.Context, logger *slog.Logger, chains []url.Chai
 
 		l.Info("Serve Handler", "addr", v.From.Join())
 		var svFunc serveFunc
+		logger.Handler()
 		switch v.From.Scheme {
 		case "https":
 			// https 要本地预置证书文件
-			svFunc = serveHTTPS(gc.ServerCertFile, gc.ServerKeyFile, gc.SvrTlsCfg)
+			svFunc = serveHTTPS(gc.ServerCertFile, gc.ServerKeyFile, gc.SvrTlsCfg, logWriter)
 		case "http":
-			svFunc = serveHTTP()
+			svFunc = serveHTTP(logWriter)
 		default:
 			panic("not support scheme " + v.From.Scheme)
 		}
@@ -142,7 +147,8 @@ func main() {
 	flag.StringVar(&mapperFilePath, "mapper", "mapper.txt", "The host:port mapper file path")
 	flag.StringVar(&certsDir, "certs", "./certs", "The server.cert.pem and server.key.pem file dir")
 	flag.Parse()
-	var logger = slog.New(slog.NewJSONHandler(os.Stderr)).With("pid", os.Getpid())
+	var logWriter = os.Stderr
+	var logger = slog.New(slog.NewJSONHandler(logWriter, &slog.HandlerOptions{})).With("pid", os.Getpid())
 	var ctx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
@@ -165,5 +171,5 @@ func main() {
 	var gc = createGlobalContext(certsDir, clt, svr)
 
 	logger.Info("write TLS master secrets", "client", clt.Name(), "server", svr.Name())
-	listenChainList(ctx, logger, chains, gc)
+	listenChainList(ctx, logger, logWriter, chains, gc)
 }

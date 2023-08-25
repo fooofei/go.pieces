@@ -72,8 +72,8 @@ func ParseChain(filePath string) ([]Chain, error) {
 		if strings.HasPrefix(line, "#") {
 			continue
 		}
-		var pair = strings.Split(line, " ")
-		if len(pair) != 2 {
+		var pair = strings.Fields(line)
+		if len(pair) < 2 {
 			return nil, fmt.Errorf("invalid format of '%s'", line)
 		}
 		var s1 *Url
