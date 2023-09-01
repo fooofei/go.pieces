@@ -6,10 +6,9 @@ import (
 	"path/filepath"
 )
 
-func generateTmpFile() string {
+func getCurDir() string {
 	var fullPath, _ = os.Executable()
-	var cur = filepath.Dir(fullPath)
-	return filepath.Join(cur, string(randString(16)))
+	return filepath.Dir(fullPath)
 }
 
 func randString(n int) []byte {

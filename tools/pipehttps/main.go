@@ -3,17 +3,20 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"flag"
-	"github.com/fooofei/go_pieces/tools/pipehttps/url"
+	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"syscall"
+	"time"
 )
 
 // 如果一个微服务请求 HTTPS 接口 发生了错误，但是不能抓包定位
@@ -25,104 +28,78 @@ import (
 // mapper file format:
 // http://127.0.0.1:18100 https://example.com:1984+
 
-type serveFunc func(server *http.Server, listener net.Listener) error
+func listenChainList(ctx context.Context, logger *slog.Logger, chains []Chain) {
+	var err error
+	var requestSequence int64
+	var wg = sync.WaitGroup{}
 
-func serveHTTP(logWriter io.Writer) serveFunc {
-	return func(server *http.Server, listener net.Listener) error {
-		// add a tail blank for prefix
-		server.ErrorLog = log.New(logWriter, "net/http/server ", log.Lshortfile|log.LstdFlags)
-		return server.Serve(listener)
+	for _, chain := range chains {
+		l := logger.With("from", chain.From.URL(), "to", chain.To.URL())
+		wg.Add(1)
+		go func(c Chain) {
+			defer wg.Done()
+			l.Info("create chain listen")
+			if err = listenChain(ctx, c, &requestSequence, createUpstreamTransport(c.To.KeyLogWriter)); err != nil {
+				l.Error("error occur in ListenChain", "error", err)
+			}
+		}(chain)
 	}
+	wg.Wait()
 }
 
-func serveHTTPS(certFile, keyFile string, tlsConfig *tls.Config, logWriter io.Writer) serveFunc {
-	return func(server *http.Server, listener net.Listener) error {
-		server.TLSConfig = tlsConfig
-		// add a tail blank for prefix
-		server.ErrorLog = log.New(logWriter, "net/http/server ", log.Lshortfile|log.LstdFlags)
-		return server.ServeTLS(listener, certFile, keyFile)
-	}
-}
-
-func listenAndServe(ctx context.Context, addr string, handler http.Handler, fn serveFunc) error {
-	lc := net.ListenConfig{}
-	ln, err := lc.Listen(ctx, "tcp", addr)
+func listenChain(ctx context.Context, chain Chain, requestSequence *int64, upstreamTransport *http.Transport) error {
+	var serv = &http.Server{Addr: chain.From.ListenAddr()}
+	// create a listen
+	var lc = net.ListenConfig{}
+	var ln, err = lc.Listen(ctx, "tcp", chain.From.ListenAddr())
 	if err != nil {
 		return err
 	}
-	serv := &http.Server{Addr: addr, Handler: handler}
-	return fn(serv, ln)
-}
-
-func partialListenFunc(ctx context.Context, addr string, handler http.Handler, fn serveFunc) func() error {
-	return func() error {
-		return listenAndServe(ctx, addr, handler, fn)
+	// set handler
+	var upstreamClient = &http.Client{
+		Transport:     upstreamTransport,
+		CheckRedirect: nil,
+		Jar:           nil,
+		Timeout:       0,
 	}
-}
+	serv.Handler = getServerHandleFunc(ctx, upstreamClient, requestSequence, chain)
 
-type globalContext struct {
-	RequestSequence int64
-	ServerCertFile  string
-	ServerKeyFile   string
-	Transport       *http.Transport // used for http client
-	SvrTlsCfg       *tls.Config     // used for http server
-}
+	serv.TLSConfig = &tls.Config{
+		InsecureSkipVerify: true,
+		KeyLogWriter:       chain.From.KeyLogWriter,
+	}
 
-func listenChainList(ctx context.Context, logger *slog.Logger, logWriter io.Writer, chains []url.Chain, gc *globalContext) {
-	var err error
-	var errCh = make(chan error, 100)
+	var closeCh = make(chan error)
 
-	for _, v := range chains {
-		l := logger.With("from", v.From.URL(), "to", v.To.URL())
-
-		ch := &ChainHandler{
-			gtx: ctx,
-			clt: &http.Client{
-				Transport:     gc.Transport,
-				CheckRedirect: nil,
-				Jar:           nil,
-				Timeout:       0,
-			},
-			seq:   &gc.RequestSequence,
-			chain: v,
-		}
-		m := http.NewServeMux()
-		m.Handle("/", ch)
-
-		l.Info("Serve Handler", "addr", v.From.Join())
-		var svFunc serveFunc
-		logger.Handler()
-		switch v.From.Scheme {
-		case "https":
+	go func() {
+		var err error
+		switch chain.From.Scheme {
+		case HttpsScheme:
 			// https 要本地预置证书文件
-			svFunc = serveHTTPS(gc.ServerCertFile, gc.ServerKeyFile, gc.SvrTlsCfg, logWriter)
-		case "http":
-			svFunc = serveHTTP(logWriter)
+			err = serv.ServeTLS(ln, chain.CertFilePath, chain.KeyFilePath)
+		case HttpScheme:
+			err = serv.Serve(ln)
 		default:
-			panic("not support scheme " + v.From.Scheme)
+			err = fmt.Errorf("not support scheme %s", chain.From.Scheme)
 		}
-
-		go func(pfn func() error) {
-			if err = pfn(); err != nil {
-				errCh <- err
-			}
-		}(partialListenFunc(ctx, v.From.Join(), m, svFunc))
-	}
+		if err != nil && errors.Is(err, http.ErrServerClosed) {
+			closeCh <- err
+		}
+		close(closeCh)
+	}()
 
 	select {
+	case err = <-closeCh:
+		serv.Shutdown(ctx)
+		return err
 	case <-ctx.Done():
-	case err = <-errCh:
-		panic(err)
+		var shutdownCtx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		return serv.Shutdown(shutdownCtx)
 	}
 }
 
-func createGlobalContext(certsDir string, cltTlsKeyLogWriter io.Writer, svrTlsKeyLogWriter io.Writer) *globalContext {
-	var gc = &globalContext{
-		ServerCertFile:  filepath.Join(certsDir, "server.cert.pem"),
-		ServerKeyFile:   filepath.Join(certsDir, "server.key.pem"),
-		RequestSequence: 0,
-	}
-	// setup client's config
+func createUpstreamTransport(tlsKeyLogWriter io.Writer) *http.Transport {
 	var trf = http.DefaultTransport.(*http.Transport)
 	var tr = trf.Clone()
 	if tr.TLSClientConfig == nil {
@@ -130,46 +107,47 @@ func createGlobalContext(certsDir string, cltTlsKeyLogWriter io.Writer, svrTlsKe
 	}
 	tr.Proxy = nil
 	tr.TLSClientConfig.InsecureSkipVerify = true // 我们的目的是定位问题 忽略证书校验 我们访问其他地址不校验
-	tr.TLSClientConfig.KeyLogWriter = cltTlsKeyLogWriter
-	gc.Transport = tr
-
-	// setup server's config
-	gc.SvrTlsCfg = &tls.Config{
-		InsecureSkipVerify: true,
-		KeyLogWriter:       svrTlsKeyLogWriter,
-	}
-	return gc
+	tr.TLSClientConfig.KeyLogWriter = tlsKeyLogWriter
+	return tr
 }
 
 func main() {
 	var mapperFilePath string
 	var certsDir string
 	flag.StringVar(&mapperFilePath, "mapper", "mapper.txt", "The host:port mapper file path")
-	flag.StringVar(&certsDir, "certs", "./certs", "The server.cert.pem and server.key.pem file dir")
+	flag.StringVar(&certsDir, "certs", "./certs", "The cert.pem and key.pem file dir")
 	flag.Parse()
 	var logWriter = os.Stderr
 	var logger = slog.New(slog.NewJSONHandler(logWriter, &slog.HandlerOptions{})).With("pid", os.Getpid())
 	var ctx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	var chains, err = url.ParseChain(mapperFilePath)
+	var chainList, err = parseChainList(mapperFilePath)
 	if err != nil {
 		panic(err)
 	}
 
-	var keyLogFilePath = generateTmpFile()
-	var clt *os.File
-	var svr *os.File
-	if clt, err = os.Create(keyLogFilePath + "-client.txt"); err != nil {
-		panic(err)
-	}
-	defer clt.Close()
-	if svr, err = os.Create(keyLogFilePath + "-server.txt"); err != nil {
-		panic(err)
-	}
-	defer svr.Close()
-	var gc = createGlobalContext(certsDir, clt, svr)
+	var ts = strconv.FormatInt(time.Now().UnixMilli(), 10)
+	var keyLogFilePath = fmt.Sprintf("%s/%s_%s_tls_", getCurDir(), ts, string(randString(16)))
+	var clientKeyLogCh = make(chan []byte)
+	var upstreamKeyLogCh = make(chan []byte)
 
-	logger.Info("write TLS master secrets", "client", clt.Name(), "server", svr.Name())
-	listenChainList(ctx, logger, logWriter, chains, gc)
+	chainList = setChainListKeyLogWriter(chainList, createKeyLogWriter(ctx, clientKeyLogCh), createKeyLogWriter(ctx, upstreamKeyLogCh))
+	chainList = setChainListHttpErrLog(chainList, logWriter)
+	chainList = setChainListTLSKeyCert(chainList, filepath.Join(certsDir, "key.pem"), filepath.Join(certsDir, "cert.pem"))
+	var wg = sync.WaitGroup{}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		writeKeyLog(ctx, keyLogFilePath+"client.txt", clientKeyLogCh)
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		writeKeyLog(ctx, keyLogFilePath+"upstream.txt", upstreamKeyLogCh)
+	}()
+
+	listenChainList(ctx, logger, chainList)
+	wg.Wait()
 }
