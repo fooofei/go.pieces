@@ -56,13 +56,15 @@ func WithDumpResp(w io.Writer) func(*http.Response) {
 // host format is http://1.1.1.1:9090  not tail with '/'
 // 这个很重要 找了很久如何只更新连接地址，这个比较理想
 func cloneReqWithNewHost(ctx context.Context, req *http.Request, host string) (*http.Request, error) {
-	r1 := req.Clone(ctx)
-	r2, err := http.NewRequest(req.Method, fmt.Sprintf("%s%s", host, req.URL.Path), nil)
+	r := req.Clone(ctx)
+	r.URL.Scheme = ""
+	r.URL.Host = ""
+	reqUrl, err := http.NewRequest(req.Method, fmt.Sprintf("%s%s", host, r.URL.String()), nil)
 	if err != nil {
 		return nil, err
 	}
-	r1.URL = r2.URL
-	r1.Host = r2.Host
-	r1.RequestURI = r2.RequestURI
-	return r1, nil
+	r.URL = reqUrl.URL
+	r.Host = reqUrl.Host
+	r.RequestURI = reqUrl.RequestURI
+	return r, nil
 }
