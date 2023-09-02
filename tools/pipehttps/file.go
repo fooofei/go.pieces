@@ -23,3 +23,12 @@ func randString(n int) []byte {
 	}
 	return b
 }
+
+func testFileExists(filePath string) error {
+	var f, err = os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	f.Close()
+	return nil
+}

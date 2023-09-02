@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -33,7 +32,7 @@ func parseChainList(filePath string) ([]Chain, error) {
 		}
 		var pair = strings.Fields(line)
 		if len(pair) < 2 {
-			return nil, fmt.Errorf("invalid format of '%s'", line)
+			continue
 		}
 		var s1 *Url
 		var s2 *Url

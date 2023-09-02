@@ -10,12 +10,13 @@ import (
 	"time"
 )
 
-func pipeResponse(resp *http.Response, w http.ResponseWriter) {
+func pipeResponse(resp *http.Response, w http.ResponseWriter) error {
 	for k := range resp.Header {
 		w.Header().Set(k, resp.Header.Get(k))
 	}
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	var _, err = io.Copy(w, resp.Body)
+	return err
 }
 
 func getServerHandleFunc(ctxg context.Context, upstreamClient *http.Client, seq *int64, chain Chain) http.HandlerFunc {
@@ -43,7 +44,7 @@ func getServerHandleFunc(ctxg context.Context, upstreamClient *http.Client, seq 
 			count, chain.From.URL(), chain.To.URL())
 		WithDumpReq(dumpBuffer)(upstreamReq)
 		if upstreamResp, err = upstreamClient.Do(upstreamReq); err != nil {
-			fmt.Fprintf(dumpBuffer, "error: <%T>%v\n", err, err)
+			fmt.Fprintf(dumpBuffer, "failed request to upstream error: <%T>%v\n", err, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -53,7 +54,9 @@ func getServerHandleFunc(ctxg context.Context, upstreamClient *http.Client, seq 
 
 		// 这个方法不是 pipe 作用，不符合预期
 		// _ = resp.Write(w)
-		pipeResponse(upstreamResp, w)
+		if err = pipeResponse(upstreamResp, w); err != nil {
+			fmt.Fprintf(dumpBuffer, "failed write client response from upstream response")
+		}
 		upstreamResp.Body.Close()
 	}
 }

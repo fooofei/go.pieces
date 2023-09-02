@@ -38,9 +38,9 @@ func listenChainList(ctx context.Context, logger *slog.Logger, chains []Chain) {
 		wg.Add(1)
 		go func(c Chain) {
 			defer wg.Done()
-			l.Info("create chain listen")
+			l.Info("create forward pair")
 			if err = listenChain(ctx, c, &requestSequence, createUpstreamTransport(c.To.KeyLogWriter)); err != nil {
-				l.Error("error occur in ListenChain", "error", err)
+				l.Error("exit listen for error occur in listenChain", "error", err)
 			}
 		}(chain)
 	}
@@ -69,21 +69,27 @@ func listenChain(ctx context.Context, chain Chain, requestSequence *int64, upstr
 		KeyLogWriter:       chain.From.KeyLogWriter,
 	}
 
-	var closeCh = make(chan error)
+	var closeCh = make(chan error, 1)
 
 	go func() {
-		var err error
+		var errServe error
 		switch chain.From.Scheme {
 		case HttpsScheme:
 			// https 要本地预置证书文件
-			err = serv.ServeTLS(ln, chain.CertFilePath, chain.KeyFilePath)
+			if errServe = testFileExists(chain.CertFilePath); errServe != nil {
+				break
+			}
+			if errServe = testFileExists(chain.KeyFilePath); errServe != nil {
+				break
+			}
+			errServe = serv.ServeTLS(ln, chain.CertFilePath, chain.KeyFilePath)
 		case HttpScheme:
-			err = serv.Serve(ln)
+			errServe = serv.Serve(ln)
 		default:
-			err = fmt.Errorf("not support scheme %s", chain.From.Scheme)
+			errServe = fmt.Errorf("not support scheme %s", chain.From.Scheme)
 		}
-		if err != nil && errors.Is(err, http.ErrServerClosed) {
-			closeCh <- err
+		if errServe != nil && !errors.Is(errServe, http.ErrServerClosed) {
+			closeCh <- errServe
 		}
 		close(closeCh)
 	}()
@@ -125,6 +131,10 @@ func main() {
 	var chainList, err = parseChainList(mapperFilePath)
 	if err != nil {
 		panic(err)
+	}
+	if len(chainList) == 0 {
+		fmt.Printf("not found any valid chain\n")
+		return
 	}
 
 	var ts = strconv.FormatInt(time.Now().UnixMilli(), 10)
