@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 	//is "gotest.tools/assert/cmp"
 )
 

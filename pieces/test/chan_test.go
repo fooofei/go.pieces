@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 )
 
 // 1 告诉 sub routine exit，需要1个 chan ，在 main 中 close chan 就可以

@@ -2,7 +2,7 @@ package test
 
 import (
 	"context"
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 	"os"
 	"os/signal"
 	"sync/atomic"

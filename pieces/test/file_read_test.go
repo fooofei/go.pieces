@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 )
 
 // include the \n as line end, and \r\n as line end

@@ -11,7 +11,7 @@ import (
 	"golang.org/x/text/transform"
 	"golang.org/x/xerrors"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 )
 
 
