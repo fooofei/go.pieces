@@ -3,7 +3,7 @@ package ringbuffer
 import (
 	"testing"
 
-	"gotest.tools/assert"
+	"gotest.tools/v3/assert"
 )
 
 func TestRingBuf1(t *testing.T) {
