@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	coap2 "github.com/dustin/go-coap" // 老版本 "github.com/go-ocf/go-coap"
-	coapmsg "github.com/plgd-dev/go-coap/v2/message"
-	coapudp "github.com/plgd-dev/go-coap/v2/udp"
-	coapclt "github.com/plgd-dev/go-coap/v2/udp/client"
+	coapmsg "github.com/plgd-dev/go-coap/v3/message"
+	coapudp "github.com/plgd-dev/go-coap/v3/udp"
+	coapclt "github.com/plgd-dev/go-coap/v3/udp/client"
 )
 
 // 两个 CoAP package
