@@ -1,4 +1,4 @@
-package main
+package pipehttps
 
 import (
 	"crypto/rand"
@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 )
 
-func getCurDir() string {
+func GetCurDir() string {
 	var fullPath, _ = os.Executable()
 	return filepath.Dir(fullPath)
 }
 
-func randString(n int) []byte {
+func RandString(n int) []byte {
 	const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	var b = make([]byte, n)
 
@@ -24,7 +24,7 @@ func randString(n int) []byte {
 	return b
 }
 
-func testFileExists(filePath string) error {
+func TestFileExists(filePath string) error {
 	var f, err = os.Open(filePath)
 	if err != nil {
 		return err

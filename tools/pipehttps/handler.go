@@ -1,4 +1,4 @@
-package main
+package pipehttps
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func pipeResponse(resp *http.Response, w http.ResponseWriter) error {
+func PipeResponse(resp *http.Response, w http.ResponseWriter) error {
 	for k := range resp.Header {
 		w.Header().Set(k, resp.Header.Get(k))
 	}
@@ -19,7 +19,7 @@ func pipeResponse(resp *http.Response, w http.ResponseWriter) error {
 	return err
 }
 
-func getServerHandleFunc(ctxg context.Context, upstreamClient *http.Client, seq *int64, chain Chain) http.HandlerFunc {
+func GetServerHandleFunc(ctxg context.Context, upstreamClient *http.Client, seq *int64, chain Chain) http.HandlerFunc {
 	// ServeHTTP 将会把请求 pipe 出去
 	return func(w http.ResponseWriter, request *http.Request) {
 		var (
@@ -35,7 +35,7 @@ func getServerHandleFunc(ctxg context.Context, upstreamClient *http.Client, seq 
 			fmt.Print(dumpBuffer.String())
 		}()
 
-		if upstreamReq, err = cloneReqWithNewHost(ctx, request, chain.To.URL()); err != nil {
+		if upstreamReq, err = CloneReqWithNewHost(ctx, request, chain.To.URL()); err != nil {
 			fmt.Fprintf(dumpBuffer, "failed create request with error: <%T>%v\n", err, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -54,7 +54,7 @@ func getServerHandleFunc(ctxg context.Context, upstreamClient *http.Client, seq 
 
 		// 这个方法不是 pipe 作用，不符合预期
 		// _ = resp.Write(w)
-		if err = pipeResponse(upstreamResp, w); err != nil {
+		if err = PipeResponse(upstreamResp, w); err != nil {
 			fmt.Fprintf(dumpBuffer, "failed write client response from upstream response")
 		}
 		upstreamResp.Body.Close()

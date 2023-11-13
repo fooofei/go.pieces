@@ -1,4 +1,4 @@
-package main
+package pipehttps
 
 import (
 	"context"
@@ -12,7 +12,7 @@ func (w ioWriterAsFunc) Write(p []byte) (n int, err error) {
 	return w(p)
 }
 
-func createKeyLogWriter(ctx context.Context, ch chan []byte) io.Writer {
+func CreateKeyLogWriter(ctx context.Context, ch chan []byte) io.Writer {
 	var pfn = func(p []byte) (n int, err error) {
 		select {
 		case <-ctx.Done():
@@ -25,7 +25,7 @@ func createKeyLogWriter(ctx context.Context, ch chan []byte) io.Writer {
 	return ioWriterAsFunc(pfn)
 }
 
-func writeKeyLog(ctx context.Context, filePath string, ch chan []byte) {
+func WriteKeyLog(ctx context.Context, filePath string, ch chan []byte) {
 	var f, err = os.Create(filePath)
 	if err != nil {
 		panic(err)

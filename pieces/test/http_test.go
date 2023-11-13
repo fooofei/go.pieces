@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"golang.org/x/exp/slog"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -13,7 +12,7 @@ import (
 	"os"
 	"time"
 
-	_ "github.com/julienschmidt/httprouter"
+	"golang.org/x/exp/slog"
 )
 
 func sampleHandler(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +52,7 @@ func setupServer(ctx context.Context, logger *slog.Logger) error {
 	case err = <-serverClosedCh:
 		return err
 	case <-ctx.Done():
-		logger.Info("shutdown server")
+		slog.Info("shutdown server")
 		// 这里可以继续增强，使用自定义超时的 context，不使用当前的 ctx，使用当前的 ctx 会立刻退出 shutdown
 		_ = server.Shutdown(ctx)
 	}

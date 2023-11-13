@@ -1,4 +1,4 @@
-package main
+package pipehttps
 
 import (
 	"bytes"
@@ -52,10 +52,10 @@ func WithDumpResp(w io.Writer) func(*http.Response) {
 	}
 }
 
-// cloneReqWithNewHost will clone http request from req, with updated host
+// CloneReqWithNewHost will clone http request from req, with updated host
 // host format is http://1.1.1.1:9090  not tail with '/'
 // 这个很重要 找了很久如何只更新连接地址，这个比较理想
-func cloneReqWithNewHost(ctx context.Context, req *http.Request, host string) (*http.Request, error) {
+func CloneReqWithNewHost(ctx context.Context, req *http.Request, host string) (*http.Request, error) {
 	r := req.Clone(ctx)
 	r.URL.Scheme = ""
 	r.URL.Host = ""

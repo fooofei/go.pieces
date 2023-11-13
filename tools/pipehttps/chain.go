@@ -1,4 +1,4 @@
-package main
+package pipehttps
 
 import (
 	"bufio"
@@ -18,7 +18,7 @@ type Chain struct {
 }
 
 // parseChain 解析配置文件
-func parseChainList(filePath string) ([]Chain, error) {
+func ParseChainList(filePath string) ([]Chain, error) {
 	var content, err = os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
@@ -50,7 +50,7 @@ func parseChainList(filePath string) ([]Chain, error) {
 	return pairs, nil
 }
 
-func setChainListKeyLogWriter(chainList []Chain, clientKeyLogWriter, upstreamKeyLogWriter io.Writer) []Chain {
+func SetChainListKeyLogWriter(chainList []Chain, clientKeyLogWriter, upstreamKeyLogWriter io.Writer) []Chain {
 	var r = make([]Chain, 0, len(chainList))
 	for _, e := range chainList {
 		e.From.KeyLogWriter = clientKeyLogWriter
@@ -60,7 +60,7 @@ func setChainListKeyLogWriter(chainList []Chain, clientKeyLogWriter, upstreamKey
 	return r
 }
 
-func setChainListTLSKeyCert(chainList []Chain, keyFilePath, certFilePath string) []Chain {
+func SetChainListTLSKeyCert(chainList []Chain, keyFilePath, certFilePath string) []Chain {
 	var r = make([]Chain, 0, len(chainList))
 	for _, e := range chainList {
 		e.KeyFilePath = keyFilePath
@@ -70,7 +70,7 @@ func setChainListTLSKeyCert(chainList []Chain, keyFilePath, certFilePath string)
 	return r
 }
 
-func setChainListHttpErrLog(chainList []Chain, w io.Writer) []Chain {
+func SetChainListHttpErrLog(chainList []Chain, w io.Writer) []Chain {
 	var r = make([]Chain, 0, len(chainList))
 	var l = log.New(w, "net/http/server ", log.Lshortfile|log.LstdFlags)
 	for _, e := range chainList {
