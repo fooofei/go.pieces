@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"net"
 	"net/url"
 	"strings"
@@ -14,10 +13,9 @@ const (
 )
 
 type Url struct {
-	Scheme       string
-	Host         string
-	Port         string
-	KeyLogWriter io.Writer
+	Scheme string
+	Host   string
+	Port   string
 }
 
 func (s Url) URL() string {
