@@ -1,4 +1,4 @@
-package pipehttps
+package main
 
 import (
 	"crypto/rand"

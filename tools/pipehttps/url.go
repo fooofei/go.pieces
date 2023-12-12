@@ -1,4 +1,4 @@
-package pipehttps
+package main
 
 import (
 	"fmt"
@@ -20,22 +20,23 @@ type Url struct {
 	KeyLogWriter io.Writer
 }
 
-func (s *Url) URL() string {
+func (s Url) URL() string {
 	return fmt.Sprintf("%v://%v", s.Scheme, s.ListenAddr())
 }
 
-func (s *Url) ListenAddr() string {
+func (s Url) ListenAddr() string {
 	if s.Port == "" {
 		return s.Host
 	}
 	return net.JoinHostPort(s.Host, s.Port)
 }
 
-func parsePathToUrl(path string) (*Url, error) {
-	var s = &Url{}
+// 解析这样的格式 https://0.0.0.0:443 字符串到 url 对象
+func parsePathToUrl(path string) (Url, error) {
+	var s = Url{}
 	var u, err = url.Parse(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed url.Parse '%v' %w", path, err)
+		return Url{}, fmt.Errorf("failed url.Parse '%v' %w", path, err)
 	}
 	s.Scheme = u.Scheme
 	s.Scheme = strings.ToLower(s.Scheme)
@@ -56,4 +57,26 @@ func parsePathToUrl(path string) (*Url, error) {
 		}
 	}
 	return s, nil
+}
+
+func ParserUrlList(pathList []string) ([]Url, error) {
+	var resultList = make([]Url, 0)
+
+	for _, p := range pathList {
+		var r, err = parsePathToUrl(p)
+		if err != nil {
+			return nil, err
+		}
+		resultList = append(resultList, r)
+	}
+	return resultList, nil
+}
+
+func hasHttpsUrl(urlList []Url) bool {
+	for _, u := range urlList {
+		if u.Scheme == HttpsScheme {
+			return true
+		}
+	}
+	return false
 }
