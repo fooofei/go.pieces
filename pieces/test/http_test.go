@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -23,28 +24,35 @@ func sampleHandler(w http.ResponseWriter, r *http.Request) {
 // 这篇文章介绍如何正确 shutdown，就像下面的代码这样 https://dev.to/mokiat/proper-http-shutdown-in-go-3fji
 //
 
-func setupServer(ctx context.Context, logger *slog.Logger) error {
-	metricAddr := ":8888"
-	// 构建一个局部 http server，不使用 http 包的默认 server
-	// 使用全局的会跟其他包注册到同一个路由上，会互相妨碍
-	mux := http.NewServeMux()
-	mux.HandleFunc("/metrics", sampleHandler)
-	lc := &net.ListenConfig{}
+// 是正确创建一个 http server
+// h 可以是提前创建的
+// 可以学习以下，构建一个局部 http server，不使用 http 包的默认 server
+// 使用全局的会跟其他包注册到同一个路由上，会互相妨碍
+// mux := http.NewServeMux()
+// mux.HandleFunc("/metrics", sampleHandler)
+func serveHttp(ctx context.Context, logger *slog.Logger, addr string, h http.Handler) error {
+	var lc = &net.ListenConfig{}
 	// this context will close listener
-	ln, err := lc.Listen(ctx, "tcp", metricAddr)
+	var ln, err = lc.Listen(ctx, "tcp", addr)
 	if err != nil {
 		return err
 	}
-	server := &http.Server{
-		Addr:    metricAddr,
-		Handler: mux,
-		// baseCtx 的作用不是关闭 accept，不是关闭正在建立的连接
+	var srv = &http.Server{
+		Addr:    addr,
+		Handler: h,
+		BaseContext: func(_ net.Listener) context.Context {
+			return ctx
+		},
+		// BaseContext 的作用不是关闭 accept，不是关闭正在建立的连接
 		// 要 关闭连接还是要用 shutdown
+		// 该 context 会传递到 handler 入参 request.Context()
 	}
-	serverClosedCh := make(chan error, 1)
+	var serverClosedCh = make(chan error, 1) // 使用有缓存的队列，防止协程入队时阻塞
 	go func() {
-		err = server.Serve(ln)
-		serverClosedCh <- err
+		err = srv.Serve(ln)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverClosedCh <- err
+		}
 		close(serverClosedCh)
 	}()
 
@@ -52,11 +60,14 @@ func setupServer(ctx context.Context, logger *slog.Logger) error {
 	case err = <-serverClosedCh:
 		return err
 	case <-ctx.Done():
-		slog.Info("shutdown server")
-		// 这里可以继续增强，使用自定义超时的 context，不使用当前的 ctx，使用当前的 ctx 会立刻退出 shutdown
-		_ = server.Shutdown(ctx)
+		logger.Info("shuting down server")
+		// 使用自定义超时的 context，不使用当前的 ctx，使用当前的 ctx 会立刻退出 shutdown
+		var exitCtx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(exitCtx)
+		logger.Info("server exit")
+		return nil
 	}
-	return err
 }
 
 func ExampleHTTPServer() {
