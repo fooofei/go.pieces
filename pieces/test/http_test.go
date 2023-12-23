@@ -24,12 +24,30 @@ func sampleHandler(w http.ResponseWriter, r *http.Request) {
 // 这篇文章介绍如何正确 shutdown，就像下面的代码这样 https://dev.to/mokiat/proper-http-shutdown-in-go-3fji
 //
 
-// 是正确创建一个 http server
+// serveHttp 是正确创建一个 http server
+//
 // h 可以是提前创建的
 // 可以学习以下，构建一个局部 http server，不使用 http 包的默认 server
 // 使用全局的会跟其他包注册到同一个路由上，会互相妨碍
 // mux := http.NewServeMux()
 // mux.HandleFunc("/metrics", sampleHandler)
+//
+// 与语言内建的 http server context 会有这两个 key
+// var (
+// 	// ServerContextKey is a context key. It can be used in HTTP
+// 	// handlers with Context.Value to access the server that
+// 	// started the handler. The associated value will be of
+// 	// type *http.Server.
+// 	ServerContextKey = &contextKey{"http-server"}
+
+//	// LocalAddrContextKey is a context key. It can be used in
+//	// HTTP handlers with Context.Value to access the local
+//	// address the connection arrived on.
+//	// The associated value will be of type net.Addr.
+//	LocalAddrContextKey = &contextKey{"local-addr"}
+//
+// )
+// 在 handler 处理中可以从 ctx 取用
 func serveHttp(ctx context.Context, logger *slog.Logger, addr string, h http.Handler) error {
 	var lc = &net.ListenConfig{}
 	// this context will close listener
