@@ -22,7 +22,7 @@ func PipeResponse(resp *http.Response, w http.ResponseWriter) error {
 	return err
 }
 
-func _getServerHandleFunc(ctxg context.Context, trans *http.Transport, seq *atomic.Int64, u Url) http.HandlerFunc {
+func _getServerHandleFuncDeprecated(ctxg context.Context, trans *http.Transport, seq *atomic.Int64, u Url) http.HandlerFunc {
 	// ServeHTTP 将会把请求 pipe 出去
 	return func(w http.ResponseWriter, request *http.Request) {
 		var ctx, cancel = context.WithTimeout(ctxg, time.Minute)
@@ -41,8 +41,8 @@ func _getServerHandleFunc(ctxg context.Context, trans *http.Transport, seq *atom
 
 		var upstreamReq = CloneReqDeep(request, ctx)
 		var toHost = request.Host
-		fmt.Fprintf(pbuf, "---req %v----------from %v to %v----------------------------------------\n",
-			count, u.URL(), toHost)
+		fmt.Fprintf(pbuf, "---req %v----------from %v to %v----------------------------------------%v\n",
+			count, u.URL(), toHost, time.Now().Local().Format(time.RFC3339))
 		WithDumpReq(pbuf)(request)
 		var upstreamClient = &http.Client{
 			Transport:     trans,
@@ -56,8 +56,8 @@ func _getServerHandleFunc(ctxg context.Context, trans *http.Transport, seq *atom
 			return
 		}
 		defer upstreamResp.Body.Close()
-		fmt.Fprintf(pbuf, "---resp %v---------------------------------------------------------------\n",
-			count)
+		fmt.Fprintf(pbuf, "---resp %v---------------------------------------------------------------%v\n",
+			count, time.Now().Local().Format(time.RFC3339))
 		WithDumpResp(pbuf)(upstreamResp)
 
 		// 这个方法不是 pipe 作用，不符合预期
@@ -75,13 +75,15 @@ type userContextT struct {
 	upstreamIpPort string
 	reqText        []byte
 	respText       []byte
+	start          time.Time
 }
 
 // String 表示，为了美观打印
 func (u *userContextT) String() string {
 	var w = bytes.NewBufferString("")
-	fmt.Fprintf(w, "---req %v----------from %v to %v %v----------------------------------------\n",
-		u.seq, u.serverUrl, u.upstreamDomain, u.upstreamIpPort)
+	fmt.Fprintf(w, "---req %v----------from %v to %v %v---startTime %v takeTime %v------------------------------------\n",
+		u.seq, u.serverUrl, u.upstreamDomain, u.upstreamIpPort,
+		u.start.Local().Format(time.RFC3339), time.Since(u.start).String())
 	fmt.Fprintf(w, "%s%s", u.reqText, u.respText)
 	return w.String()
 }
@@ -153,6 +155,7 @@ func GetServerHandleFuncV2(ctx context.Context, trans *http.Transport, httpErrLo
 			upstreamIpPort: "", // 空的字段也要填写，可以知道所有字段
 			reqText:        nil,
 			respText:       nil,
+			start:          time.Now(),
 		}
 		userCtx.reqText = getReqText(req)
 		ctx = setUserCtx(ctx, userCtx)
