@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/miekg/dns"
 	"log"
+
+	"github.com/miekg/dns"
 )
 
 type Server struct {
