@@ -9,4 +9,4 @@ require (
 	github.com/fooofei/go_pieces/pkg v0.0.0-20231108115809-fc3d9ecc3762
 )
 
-require golang.org/x/crypto v0.17.0 // indirect
+require golang.org/x/crypto v0.31.0 // indirect
