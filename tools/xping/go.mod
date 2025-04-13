@@ -7,7 +7,7 @@ toolchain go1.23.4
 replace github.com/fooofei/go_pieces/pkg => ../../pkg
 
 require (
-	github.com/fooofei/go_pieces/pkg v0.0.0-20241214023157-7f6ae3faa8ed
+	github.com/fooofei/go_pieces/pkg v0.0.0-20250204124104-af510af78abc
 	github.com/kbinani/win v0.3.0
 	github.com/montanaflynn/stats v0.7.1
 )
