@@ -85,3 +85,21 @@ func FindNode(node yast.Node, pathList []string) (yast.Node, error) {
 	}
 	return p.FilterNode(node)
 }
+
+// 把 resource list 还原为一个 yaml 文件
+func marshalYamlFile(docs []*ast.DocumentNode) ([]byte, error) {
+	// 不能一次序列化所有，要分开做，否则结果是一个数组
+	// return yaml.MarshalWithOptions(f, yaml.WithComment(cm))
+	var b bytes.Buffer
+	var cm = make(yaml.CommentMap)
+	var enc = yaml.NewEncoder(&b, yaml.WithComment(cm))
+	fmt.Fprintf(&b, "---\n") // 先写入一个分隔符，否则 encode 第一次不会写入
+	for _, d := range docs {
+		cm2 := getDocCommentMap(d)
+		mapsOverWrite(cm, cm2)
+		if err := enc.Encode(d); err != nil {
+			return nil, fmt.Errorf("failed encode yaml document, %w", err)
+		}
+	}
+	return b.Bytes(), nil
+}
