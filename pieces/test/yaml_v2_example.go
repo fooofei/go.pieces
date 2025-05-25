@@ -103,3 +103,21 @@ func marshalYamlFile(docs []*ast.DocumentNode) ([]byte, error) {
 	}
 	return b.Bytes(), nil
 }
+
+func mapsOverWrite[M1 ~map[K]V, M2 ~map[K]V, K comparable, V any](dst M1, src M2) {
+	for k, _ := range dst {
+		delete(dst, k)
+	}
+	maps.Copy(dst, src)
+}
+
+func getDocCommentMap(doc *ast.DocumentNode) yaml.CommentMap {
+	var cm = make(yaml.CommentMap)
+	var value = make(map[string]any)
+	if err := yaml.NodeToValue(doc.Body, &value, yaml.CommentToMap(cm)); err != nil {
+		return make(yaml.CommentMap)
+	}
+	return cm
+}
+
+
