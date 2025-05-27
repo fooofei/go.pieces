@@ -11,6 +11,8 @@ import (
 	yast "github.com/goccy/go-yaml/ast"
 )
 
+// 20250527 记录缺陷，现在不支持 停止 merge 遇到 << ，但是我现在需要这个能力
+
 // yaml.YAMLToJSON 的原理是会设置为 flowStyle 然后就会调用到 printer.PrintNode %v 打印就会调用到 node 的 String() 方法
 //func (n *MappingNode) flowStyleString(commentMode bool) string {
 //这里面是手工拼接的 {} 号
