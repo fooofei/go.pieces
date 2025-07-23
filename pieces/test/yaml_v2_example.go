@@ -1,13 +1,15 @@
-package yaml
+package test
 
 import (
 	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"strings"
 
 	"github.com/goccy/go-yaml"
+	"github.com/goccy/go-yaml/ast"
 	yast "github.com/goccy/go-yaml/ast"
 )
 
@@ -121,5 +123,3 @@ func getDocCommentMap(doc *ast.DocumentNode) yaml.CommentMap {
 	}
 	return cm
 }
-
-

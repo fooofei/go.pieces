@@ -1,6 +1,5 @@
 package test
 
-
 import (
 	"crypto"
 	"crypto/rand"
@@ -12,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"testing"
 )
 
 // 这个文件演示如何在 go 语言中使用 sha256rsa 算法
@@ -73,8 +71,4 @@ func sha256WithRSA() {
 	}
 	value := base64.StdEncoding.EncodeToString(signature)
 	fmt.Printf("%v\n", value)
-}
-
-func TestSha256WithRSA(t *testing.T) {
-	sha256WithRSA()
 }

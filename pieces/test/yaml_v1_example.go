@@ -1,5 +1,4 @@
-
-package yaml
+package test
 
 import (
 	"bytes"
@@ -15,7 +14,7 @@ import (
 
 // Marshal 把输入的 in 对象序列化为字节流
 // 使用熟悉的 2 空格缩进
-func Marshal(in any) ([]byte, error) {
+func Marshalv1(in any) ([]byte, error) {
 	var b = bytes.NewBufferString("")
 	var yamlEncoder = old.NewEncoder(b)
 	yamlEncoder.SetIndent(2)
@@ -25,8 +24,8 @@ func Marshal(in any) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func MarshalWriter(in any, w io.Writer) error {
-	var b, err = Marshal(in)
+func MarshalWriterv1(in any, w io.Writer) error {
+	var b, err = Marshalv1(in)
 	if err != nil {
 		return err
 	}
@@ -35,7 +34,7 @@ func MarshalWriter(in any, w io.Writer) error {
 }
 
 // UnmarshalTo 把 in 对象序列化后，然后反序列化生成 out，用于不同对象之间的转换
-func UnmarshalTo(in any, out any) error {
+func UnmarshalTov1(in any, out any) error {
 	var content, err = old.Marshal(in)
 	if err != nil {
 		return fmt.Errorf("failed yaml marshal, %w", err)
@@ -51,7 +50,7 @@ func UnmarshalReader(r io.Reader, out any) error {
 	return UnmarshalBytes(content, out)
 }
 
-func UnmarshalBytes(content []byte, out any) error {
+func UnmarshalBytesv1(content []byte, out any) error {
 	return old.Unmarshal(content, out)
 }
 
@@ -127,7 +126,7 @@ func NewBytesNode(value []byte) *old.Node {
 }
 
 // FindNode 找到1个可用的 node，是开源库的瘦身版本
-func FindNode(node *old.Node, pathList []string) (*old.Node, error) {
+func FindNodev1(node *old.Node, pathList []string) (*old.Node, error) {
 	const pathSep = "." // 开源库约定是这个分割符号
 	var path = strings.Join(pathList, pathSep)
 	return FindNodeRawPath(node, fmt.Sprintf("$.%v", path))

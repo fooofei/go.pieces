@@ -1,6 +1,10 @@
 package test
 
-
+import (
+	"bytes"
+	"fmt"
+	"text/template"
+)
 
 // 把 ${} 分割的变量渲染为最终值 不支持 ${var:defaultvalue} 的语法
 func renderActions(text string, values map[string]any) (string, error) {

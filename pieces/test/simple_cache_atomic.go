@@ -1,39 +1,17 @@
 package test
 
 import (
-	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
-const cacheTTL = 2 * time.Second
-
-// traceType only for test, you can delete this when you use cache
-type traceType struct {
-	RealRequestCount atomic.Int64
-	RequestCount     atomic.Int64
-}
-
 // this is a simple cache.
 // when request result have a ttl, we can use this cache to save result
 type cacheDataTypeAtomic struct {
-	Data     string
+	Data     any
 	UpdateAt time.Time
 	Err      error
-}
-
-func realWork(ctx context.Context) (string, error) {
-	select {
-	case <-time.After(3 * time.Second):
-	case <-ctx.Done():
-	}
-	var b = make([]byte, 8)
-	rand.Read(b)
-	return hex.EncodeToString(b), nil
-
 }
 
 // use global atomic value to save data
@@ -43,7 +21,7 @@ var gCacheAtomic = &atomic.Pointer[cacheDataTypeAtomic]{}
 // others will share the work result
 var gRequestingOnce = &atomic.Pointer[sync.Once]{}
 
-func getWorkResultWithCacheAtomic(ctx context.Context, stat *traceType) (string, error) {
+func getWorkResultWithCacheAtomic(taskFn func() (any, error), cacheTTL time.Duration) (any, error) {
 	var slowFunc = func() {
 		for {
 			var tmpOnce = gRequestingOnce.Load()
@@ -55,8 +33,7 @@ func getWorkResultWithCacheAtomic(ctx context.Context, stat *traceType) (string,
 			}
 			// 这里会自动等待
 			tmpOnce.Do(func() {
-				stat.RealRequestCount.Add(1)
-				var t, err = realWork(ctx)
+				var t, err = taskFn()
 				gCacheAtomic.Store(&cacheDataTypeAtomic{
 					Data:     t,
 					UpdateAt: time.Now(),
@@ -77,7 +54,6 @@ func getWorkResultWithCacheAtomic(ctx context.Context, stat *traceType) (string,
 	} else if tmpCache.UpdateAt.Add(cacheTTL).Before(now) {
 		slowFunc()
 	}
-	stat.RequestCount.Add(1)
 	tmpCache = gCacheAtomic.Load()
 	if tmpCache.Err != nil {
 		return "", tmpCache.Err

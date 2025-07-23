@@ -43,7 +43,7 @@ func ExampleMyStruct() {
 	//MyStruct c=*test.MyStruct c=<MyStruct>(1,1)
 }
 
-func ExampleCmdArgs() {
+func Example_cmdArgs() {
 	argsLen := len(os.Args)
 
 	fmt.Printf("argsLen:%v\n", argsLen)
@@ -70,7 +70,7 @@ func ExampleCmdArgs() {
 	//ext=.exe
 }
 
-func ExampleSomeConstants() {
+func Example_someConstants() {
 	rand.Seed(time.Now().Unix())
 	n := rand.Intn(10)
 	b := (n >= 0 && n < 10)
@@ -120,7 +120,7 @@ func fib() func() int {
 	}
 }
 
-func ExampleFuncInterface() {
+func Example_funcInterface() {
 	var f FibMaker = fib()
 	LinedPrinter(f)
 	//output:
@@ -154,7 +154,7 @@ func (i IpAddr) String2() string {
 	return r
 }
 
-func ExampleIpAddr() {
+func Example_ipAddr() {
 	hosts := map[string]IpAddr{
 		"loopback":  {127, 0, 0, 1},
 		"googleDNS": {8, 8, 8, 8},

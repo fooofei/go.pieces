@@ -72,3 +72,43 @@ func TestTypeCastCheck(t *testing.T) {
 	assert.Equal(t, s2, a)
 	assert.Equal(t, is, true)
 }
+
+type XLogger interface {
+	Log(keyvals ...interface{}) error
+	Print(v ...interface{})
+}
+
+type YLogger interface {
+	Log(keyvals ...interface{}) error
+	Print(v ...interface{})
+}
+
+func yloggerFunc(y YLogger) {
+	err := y.Log("hello world")
+	if err != nil {
+		return
+	}
+}
+
+func xLoggerFunc(x XLogger) {
+	yloggerFunc(x)
+}
+
+type implLogger struct {
+}
+
+func (h implLogger) Log(keyvals ...interface{}) error {
+	fmt.Printf("implLogger: keyvals: %v\n", keyvals)
+	return nil
+}
+
+func (h implLogger) Print(v ...interface{}) {
+	fmt.Printf("implLogger: v: %v\n", v)
+}
+
+// TestDifferentInterfaceSameMethods 验证了没有泛型的 go 1.17 版本， 一样可以这样使用， 那就不是泛型引入的新功能 是因为鸭子类型接口就这样设计的
+func TestDifferentInterfaceSameMethods(t *testing.T) {
+	var x XLogger
+	x = implLogger{}
+	xLoggerFunc(x)
+}

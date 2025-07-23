@@ -1,10 +1,11 @@
 package test
 
 import (
-	"github.com/araddon/dateparse"
-	"gotest.tools/v3/assert"
 	"testing"
 	"time"
+
+	"github.com/araddon/dateparse"
+	"gotest.tools/v3/assert"
 )
 
 const (
@@ -26,7 +27,8 @@ func TestTimestampBaseTime(t *testing.T) {
 func TestTimestampNextDayOff(t *testing.T) {
 	now := time.Now()
 	todayZero := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	todayZero2 := now.Add(time.Hour * 8).Truncate(time.Hour * 24).Add(-time.Hour * 8)
+	// todayZero2 := now.Add(time.Hour * 8).Truncate(time.Hour * 24).Add(-time.Hour * 8) // 当时为什么这么测试， +8 以后截断就不一定 -8 就能回退了
+	todayZero2 := now.Truncate(time.Hour * 24)
 	t.Logf("todayZero= %v", todayZero.Format(time.RFC3339))
 	t.Logf("todayZero2= %v", todayZero2.Format(time.RFC3339))
 	assert.Equal(t, todayZero, todayZero2)

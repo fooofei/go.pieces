@@ -88,13 +88,14 @@ func serveHttp(ctx context.Context, logger *slog.Logger, addr string, h http.Han
 	}
 }
 
-func ExampleHTTPServer() {
+func Example_httpServer() {
 	ctx, cancel := context.WithCancel(context.Background())
-	logger := slog.New(slog.NewJSONHandler(os.Stdout))
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{}))
 	logger = logger.With("pid", os.Getpid())
 	logger.Info("enter main")
 	ctx, _ = context.WithTimeout(ctx, 6*time.Second)
-	err := setupServer(ctx, logger)
+	var h = http.NewServeMux()
+	err := serveHttp(ctx, logger, "", h)
 	logger.Error("err is", "error", err)
 	logger.Info("main routine exit")
 	time.Sleep(time.Minute)
@@ -102,7 +103,7 @@ func ExampleHTTPServer() {
 	_ = ctx
 }
 
-func ExampleHTTPWithProxy() {
+func Example_httpWithProxy() {
 	proxy := func(_ *http.Request) (*url.URL, error) {
 		return url.Parse("http://127.0.0.1:3128")
 	}
@@ -110,7 +111,7 @@ func ExampleHTTPWithProxy() {
 	_ = &http.Client{Transport: transport}
 }
 
-func ExampleHTTPDisableProxy() {
+func Example_httpDisableProxy() {
 	tr := &http.Transport{
 		Proxy: nil,
 	}

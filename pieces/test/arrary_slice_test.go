@@ -126,7 +126,7 @@ func TestEmptySliceAppend(t *testing.T) {
 	assert.Equal(t, IntArray(a).Breif(), "cap=5 len=1")
 }
 
-func ExampleSliceRange() {
+func Example_sliceRange() {
 	var a []int
 	a = []int{22, 33, 44, 55}
 
@@ -139,7 +139,7 @@ func ExampleSliceRange() {
 	//3 of 4=55
 }
 
-func ExampleArray2D() {
+func Exampl_array2D() {
 	arr := [3][3]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}
 
 	// error [...][...]int
