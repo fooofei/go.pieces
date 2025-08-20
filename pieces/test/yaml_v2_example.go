@@ -14,6 +14,91 @@ import (
 )
 
 // 20250527 记录缺陷，现在不支持 停止 merge 遇到 << ，但是我现在需要这个能力
+/*
+方法一： 是否可以通过 context 控制
+解析：
+  github.com/goccy/go-yaml/decode.go 132
+  func (d *Decoder) setToMapValue(ctx context.Context, node ast.Node, m map[string]interface{}) error 
+  而且这里的也不可以从外部控制
+  github.com/goccy/go-yaml/context.go 10
+  isMerge 
+  好像看起来也不是给外部控制的
+方法二：是否成员中包含 Others              map[string]any    `yaml:"bad,omitempty,alias,inline"` 几个标记 
+  会导致 hasMergeProperty() bool  true 后， 
+  github.com/goccy/go-yaml/decode.go 1333 行是否能停止 merge 呢
+解析 
+ 但是发现只有当前层级的不merge，但是递归的还是 merge 
+
+方法三： 崎岖实现了 
+ type disableMergeVisitor struct {
+	root ast.Node
+}
+
+func (v disableMergeVisitor) Visit(node ast.Node) ast.Visitor {
+	switch n := node.(type) {
+	case ast.MapKeyNode:
+		if n.IsMergeKey() {
+			switch m := n.(type) {
+			case *ast.MergeKeyNode:
+				var n2 = &DiableMergeKeyNode{m}
+				var parent = ast.Parent(v.root, n)
+				switch p := parent.(type) {
+				case *ast.MappingValueNode:
+					p.Key = n2 // 替换为我们定义的
+				}
+			}
+		}
+	}
+	return v
+}
+
+type DiableMergeKeyNode struct {
+	*ast.MergeKeyNode
+}
+
+// Read implements (io.Reader).Read
+func (n *DiableMergeKeyNode) Read(p []byte) (int, error) {
+	return n.MergeKeyNode.Read(p)
+}
+
+// Type returns MergeKeyType
+func (n *DiableMergeKeyNode) Type() ast.NodeType { return ast.MergeKeyType }
+
+// GetToken returns token instance
+func (n *DiableMergeKeyNode) GetToken() *token.Token {
+	return n.MergeKeyNode.GetToken()
+}
+
+func (n *DiableMergeKeyNode) String() string {
+	return n.MergeKeyNode.String()
+}
+
+func (n *DiableMergeKeyNode) AddColumn(col int) {
+	n.MergeKeyNode.AddColumn(col)
+}
+
+func (n *DiableMergeKeyNode) MarshalYAML() ([]byte, error) {
+	return []byte(n.MergeKeyNode.String()), nil
+}
+
+func (n *DiableMergeKeyNode) IsMergeKey() bool {
+	return false
+}
+
+func unmarshalWithoutMerge(content []byte, v interface{}) error {
+	var value ast.Node
+	var err = yaml.Unmarshal(content, &value)
+	if err != nil {
+		return fmt.Errorf("failed unmarshal yaml, %w", err)
+	}
+	ast.Walk(disableMergeVisitor{root: value}, value)
+	if err = yaml.NodeToValue(value, v); err != nil {
+		return fmt.Errorf("failed node to value, %w", err)
+	}
+	return nil
+}
+
+*/
 
 // yaml.YAMLToJSON 的原理是会设置为 flowStyle 然后就会调用到 printer.PrintNode %v 打印就会调用到 node 的 String() 方法
 //func (n *MappingNode) flowStyleString(commentMode bool) string {
