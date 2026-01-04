@@ -198,3 +198,10 @@ func WithContext(doDeadline func(t time.Time) error, or func() error) func(conte
 		}
 	}
 }
+
+
+func HowToWriteResponse(w http.ResponseWriter) {
+	w.Header().Set("Key", "Value") // 必须在 WriteHeader 之前
+	w.WriteHeader(http.StatusOK)  // 必须在 write 之前 Write 隐式调用 WriteHeader
+	fmt.Fprintln(w, "Hello, Golang!")
+}
