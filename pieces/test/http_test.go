@@ -205,3 +205,14 @@ func HowToWriteResponse(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusOK)  // 必须在 write 之前 Write 隐式调用 WriteHeader
 	fmt.Fprintln(w, "Hello, Golang!")
 }
+
+
+func HowToKnowReverseProxyTCPError() {
+	 		// 发送请求给后端时，使用的是 pkg/cellrouter/proxy/proxy.go 中的httputil.NewSingleHostReverseProxy，如果遇到tcp层的报错就拿不到error，
+			// 也就无法判断是否需要重试了，经过深入代码发现如果是tcp层报错，会在函数 func (p *ReverseProxy) defaultErrorHandler(rw http.ResponseWriter, req *http.Request, err error)
+			// 第三个参数就是我们需要的 error err = {error | *net.OpError}  Op = {string} "dial" Net = {string} "tcp" Source = {net.Addr} nil
+			// -- Addr = {net.Addr | *net.TCPAddr}  Err = {error | *net.timeoutError}
+			// 然后status固定为 StatusBadGateway，因此使用这个来判断可以重试
+			// if erw.Status != http.StatusBadGateway  
+			 
+}
