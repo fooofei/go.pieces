@@ -216,3 +216,22 @@ func HowToKnowReverseProxyTCPError() {
 			// if erw.Status != http.StatusBadGateway  
 			 
 }
+
+
+
+func WhereContextCancel() {
+	// 现象：在使用 go 内建的 http server 过程中，发现我的函数的入参 context 不知道在哪里被 cancel 了，
+	//  发现自己设置的超时是没到的，不应该 cancel  掉。
+
+	// 分析: 追溯发现是 内建的 go server 做了这个事情。
+  //  当 该tcp 连接接收到了 client 的 FIN 报文后:
+	//   这里会读取到 err，原因是因为 request body 没有读取到 EOF，因此开了一个协程还在继续读
+	//   C:\Program Files\Go\src\net\http\server.go 712
+	//   cr.handleReadError(err)
+	//   这里调用了 cr.conn.cancelCtx()
+	//  
+	//   这个 context 就是函数级别的
+	//   C:\Program Files\Go\src\net\http\server.go 1955
+	//   func (c *conn) serve(ctx context.Context)
+	//   被 cancel 后，代表整个 conn 对象就不能使用了
+}	
