@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -uxe
+set -ue
 set -o pipefail
 
 function main() {
