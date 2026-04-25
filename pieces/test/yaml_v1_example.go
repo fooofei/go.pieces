@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/vmware-labs/yaml-jsonpath/pkg/yamlpath"
-	old "gopkg.in/yaml.v3" // 以后可以尝试使用 github.com/goccy/go-yaml
+	old "gopkg.in/yaml.v3" // 以后可以尝试使用 github.com/goccy/go-yaml , 以后用 go.yaml.in/yaml/v4
 )
 
 // Marshal 把输入的 in 对象序列化为字节流
