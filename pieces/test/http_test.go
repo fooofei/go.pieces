@@ -217,8 +217,6 @@ func HowToKnowReverseProxyTCPError() {
 			 
 }
 
-
-
 func WhereContextCancel() {
 	// 现象：在使用 go 内建的 http server 过程中，发现我的函数的入参 context 不知道在哪里被 cancel 了，
 	//  发现自己设置的超时是没到的，不应该 cancel  掉。
@@ -235,3 +233,25 @@ func WhereContextCancel() {
 	//   func (c *conn) serve(ctx context.Context)
 	//   被 cancel 后，代表整个 conn 对象就不能使用了
 }	
+
+func HowToGetRemoteAddr() {
+/**
+f Response = {"http.Response | 0x0} nil
+    ctx = {context.Context | "context.cancelCtx}
+        f Context = {context.Context | "context.cancelCtx}
+            f Context = {context.Context | "context.valueCtx}
+                f Context = {context.Context | "context.valueCtx}
+                    key = {interface{} | "http.contextKey}
+                        name = (string) "local-addr"
+                        val = {interface{} | "net.TCPAddr}
+                            f IP = (net.IP) 10.70.60.162
+                            f Port = (int) 8000
+                            f Zone = (string) ""
+                            > f mu = (sync.Mutex)
+                            > f done = (atomic.Value)
+
+
+ 可以通过这个 context key http.LocalAddrContextKey 获取 tcp 连接对端地址
+
+*/
+}
