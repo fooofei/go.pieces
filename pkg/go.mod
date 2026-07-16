@@ -1,12 +1,10 @@
 module github.com/fooofei/go_pieces/pkg
 
-go 1.23.0
-
-toolchain go1.24.1
+go 1.25.0
 
 require (
 	github.com/kbinani/win v0.3.0
-	golang.org/x/sync v0.14.0
+	golang.org/x/sync v0.22.0
 	gotest.tools/v3 v3.5.1
 )
 
