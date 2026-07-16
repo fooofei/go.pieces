@@ -1,0 +1,21 @@
+# go build 在模块目录里生成的可执行文件（临时产物，不要提交）
+/tools/clock/clock
+/tools/dns-server/dns-server
+/tools/echo-client/echo-client
+/tools/echo-server/echo-server
+/tools/healthy/healthy
+/tools/lantouzi/lantouzi
+/tools/msgflow/msgflow
+/tools/perftlscps/perftlscps
+/tools/pipehttps/pipehttps
+/tools/processenv/processenv
+/tools/publicip/publicip
+/tools/share-memory-by-communicating/sharemem
+/tools/tlstcp/client
+/tools/tlstcp/server
+/tools/xping/ping
+
+# 通用 Go 编译/测试产物
+*.exe
+*.test
+*.out
